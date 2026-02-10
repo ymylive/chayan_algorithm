@@ -7,8 +7,7 @@ RUN npm ci --only=production
 
 COPY . .
 
-RUN apk add --no-cache python3 py3-pip && \
-    pip3 install --break-system-packages --no-cache-dir pandas scikit-learn numpy
+RUN apk add --no-cache python3 py3-pip py3-numpy py3-pandas py3-scikit-learn
 
 EXPOSE 3001
 
