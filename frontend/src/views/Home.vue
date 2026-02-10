@@ -40,11 +40,11 @@ const total = ref(0)
 const enterprises = ref([])
 
 const loadEnterprises = async () => {
-  const { data, total: t } = await request.get('/enterprises', {
+  const res = await request.get('/enterprises', {
     params: { name: searchName.value, page: page.value, page_size: pageSize.value }
   })
-  enterprises.value = data
-  total.value = t
+  enterprises.value = res.data.data || []
+  total.value = res.data.total || 0
 }
 
 onMounted(loadEnterprises)
