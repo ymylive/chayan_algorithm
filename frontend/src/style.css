@@ -1,79 +1,184 @@
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
+  --color-primary: #1a73e8;
+  --color-success: #34a853;
+  --color-warning: #fbbc04;
+  --color-danger: #ea4335;
+
+  --color-sidebar-bg: #001529;
+  --color-content-bg: #f0f2f5;
+  --color-surface: #ffffff;
+
+  --color-text-primary: #303133;
+  --color-text-secondary: #606266;
+  --color-border: #dcdfe6;
+
+  --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.08);
+  --radius-card: 8px;
+
+  --space-xxs: 4px;
+  --space-xs: 8px;
+  --space-sm: 12px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+
+  --transition-fast: 0.2s ease;
+  --transition-base: 0.3s ease;
+  --transition-slow: 0.45s ease;
+  --transition-interactive: color var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast), opacity var(--transition-fast), transform var(--transition-fast);
+
+  --scrollbar-size: 8px;
+  --scrollbar-thumb: rgba(144, 147, 153, 0.45);
+  --scrollbar-thumb-hover: rgba(144, 147, 153, 0.65);
+  --scrollbar-track: transparent;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  min-height: 100vh;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: var(--color-content-bg);
+  color: var(--color-text-primary);
+  font-family: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
   font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
-  font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
+  color: var(--color-primary);
+  text-decoration: none;
+  transition: var(--transition-interactive);
 }
+
 a:hover {
-  color: #535bf2;
-}
-
-body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
-}
-
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
-}
-
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
-
-.card {
-  padding: 2em;
+  color: #155cb8;
 }
 
 #app {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+  width: 100%;
 }
 
-@media (prefers-color-scheme: light) {
+button,
+input,
+textarea,
+select,
+[role="button"],
+.el-button,
+.el-input__wrapper,
+.el-select .el-input__wrapper,
+.el-card,
+.el-menu-item,
+.el-sub-menu__title,
+.el-table tr {
+  transition: var(--transition-interactive);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+.page-container {
+  padding: var(--space-lg);
+}
+
+.content-shell {
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+.table-scroll-x {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.section-title {
+  margin: 0 0 var(--space-md);
+  padding-left: var(--space-sm);
+  border-left: 3px solid var(--color-primary);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  line-height: 1.6;
+}
+
+.card-shadow {
+  box-shadow: var(--shadow-card);
+}
+
+.fade-in {
+  animation: fadeIn var(--transition-base) both;
+}
+
+.el-card {
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+.el-table th.el-table__cell {
+  background: #fafafa;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 768px) {
   :root {
-    color: #213547;
-    background-color: #ffffff;
+    --space-sm: 10px;
+    --space-md: 12px;
+    --space-lg: 16px;
+    --space-xl: 24px;
   }
-  a:hover {
-    color: #747bff;
+
+  body {
+    font-size: 13px;
   }
-  button {
-    background-color: #f9f9f9;
+
+  .page-container {
+    padding: var(--space-md);
   }
 }

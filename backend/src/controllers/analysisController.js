@@ -5,9 +5,15 @@ const { executePython } = require('../services/pythonBridge');
 const { validateAnalysisRequest } = require('../utils/validator');
 const logger = require('../config/logger');
 
+const ALLOWED_ANALYSIS_TYPES = new Set(['financial', 'market_trend', 'competitiveness']);
+
 const getAnalysis = async (req, res) => {
   try {
-    const { enterpriseId } = req.params;
+    const enterpriseId = Number(req.params.enterpriseId);
+    if (!Number.isFinite(enterpriseId)) {
+      return res.status(400).json(error('Enterprise ID must be numeric', 400));
+    }
+
     const cacheKey = `analysis:${enterpriseId}`;
 
     const cached = await redis.get(cacheKey);
@@ -36,7 +42,10 @@ const createAnalysis = async (req, res) => {
       return res.status(400).json(error(validation.errors.join(', '), 400));
     }
 
-    const { enterpriseId, metrics } = req.body;
+    const enterpriseId = Number(req.body.enterpriseId);
+    const metrics = Array.isArray(req.body.metrics)
+      ? req.body.metrics.filter(metric => ALLOWED_ANALYSIS_TYPES.has(metric))
+      : [];
 
     const enterprise = await pool.query('SELECT * FROM enterprises WHERE id = $1', [enterpriseId]);
     if (enterprise.rows.length === 0) {
@@ -48,14 +57,24 @@ const createAnalysis = async (req, res) => {
       metrics
     });
 
-    const result = await pool.query(
-      'INSERT INTO analysis_results (enterprise_id, result_data, metrics) VALUES ($1, $2, $3) RETURNING *',
-      [enterpriseId, analysisResult, metrics]
-    );
+    const resultData = analysisResult && typeof analysisResult === 'object' && !Array.isArray(analysisResult)
+      ? analysisResult
+      : {};
+    const typesToPersist = Array.from(new Set([
+      ...metrics.filter(type => resultData[type] !== undefined),
+      ...Object.keys(resultData).filter(type => ALLOWED_ANALYSIS_TYPES.has(type))
+    ]));
+
+    const insertPromises = typesToPersist.map(type => pool.query(
+      'INSERT INTO analysis_results (enterprise_id, analysis_type, result_json) VALUES ($1, $2, $3) RETURNING *',
+      [enterpriseId, type, resultData[type]]
+    ));
+    const inserted = await Promise.all(insertPromises);
+    const rows = inserted.map(item => item.rows[0]);
 
     await redis.del(`analysis:${enterpriseId}`);
     logger.info(`Analysis created for enterprise: ${enterpriseId}`);
-    res.status(201).json(success(result.rows[0], 'Analysis completed'));
+    res.status(201).json(success(rows, 'Analysis completed'));
   } catch (err) {
     logger.error('Create analysis error:', err);
     res.status(500).json(error(err.message));

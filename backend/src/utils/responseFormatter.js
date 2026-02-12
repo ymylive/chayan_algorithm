@@ -1,8 +1,8 @@
-const success = (data, message = 'Success') => ({
-  success: true,
-  message,
-  data
-});
+const success = (data, message = 'Success', total) => {
+  const result = { success: true, message, data };
+  if (total !== undefined) result.total = total;
+  return result;
+};
 
 const error = (message, code = 500) => ({
   success: false,

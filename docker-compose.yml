@@ -4,30 +4,45 @@ services:
   postgres:
     image: postgres:15-alpine
     environment:
-      POSTGRES_DB: chayan
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-    ports:
-      - "5432:5432"
+      POSTGRES_DB: ${DB_NAME:-chayan}
+      POSTGRES_USER: ${DB_USER:-chayan_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-chayan_Alg0_2024!Secure}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
     volumes:
       - redis_data:/data
 
   backend:
     build: ./backend
     ports:
-      - "8000:8000"
+      - "8000:3000"
     environment:
-      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/chayan
-      REDIS_URL: redis://redis:6379
-      AI_API_KEY: ${AI_API_KEY}
+      PORT: 3000
+      NODE_ENV: production
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-chayan}
+      DB_USER: ${DB_USER:-chayan_user}
+      DB_PASSWORD: ${DB_PASSWORD:-chayan_Alg0_2024!Secure}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_BASE_URL: ${AI_BASE_URL:-https://openrouter.ai/api/v1}
+      AI_MODEL: ${AI_MODEL:-tngtech/deepseek-r1t2-chimera:free}
+      AI_FALLBACK_MODEL: ${AI_FALLBACK_MODEL:-tngtech/deepseek-r1t2-chimera:free}
+      AI_HTTP_REFERER: ${AI_HTTP_REFERER:-}
+      AI_X_TITLE: ${AI_X_TITLE:-}
+      JWT_SECRET: ${JWT_SECRET:-chayan_jwt_replace_this_in_production_2026}
+      JWT_ISSUER: ${JWT_ISSUER:-chayan-backend}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-chayan-frontend}
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:-8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918}
+      AUTH_COOKIE_MAX_AGE_MS: ${AUTH_COOKIE_MAX_AGE_MS:-86400000}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000,http://localhost:5173,http://82.158.88.34:3000,https://chayan.cornna.xyz,http://chayan.cornna.xyz}
     depends_on:
       - postgres
       - redis
@@ -35,7 +50,7 @@ services:
   frontend:
     build: ./frontend
     ports:
-      - "3000:3000"
+      - "3000:80"
     environment:
       BACKEND_URL: http://backend:8000
     depends_on:

@@ -8,7 +8,10 @@ RUN npm ci --only=production
 COPY . .
 
 RUN apk add --no-cache python3 py3-pip py3-numpy py3-pandas py3-scikit-learn
+RUN mkdir -p /app/uploads && chown -R node:node /app
 
-EXPOSE 3001
+USER node
 
-CMD ["node", "app.js"]
+EXPOSE 3000
+
+CMD ["node", "server.js"]

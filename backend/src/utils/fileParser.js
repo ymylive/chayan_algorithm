@@ -31,8 +31,8 @@ function parseExcel(filePath) {
   return xlsx.utils.sheet_to_json(sheet);
 }
 
-function parseJson(filePath) {
-  const data = fs.readFileSync(filePath, 'utf8');
+async function parseJson(filePath) {
+  const data = await fs.promises.readFile(filePath, 'utf8');
   return JSON.parse(data);
 }
 

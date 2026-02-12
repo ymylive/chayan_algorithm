@@ -38,11 +38,33 @@
 ```bash
 git clone https://github.com/ymylive/chayan_algorithm.git
 cd chayan_algorithm
-cp backend/.env.example backend/.env
-docker-compose up -d
+cp .env.example .env
+docker compose up -d --build
 ```
 
 访问 http://localhost:3000
+
+### 服务器 Docker 部署
+
+```bash
+git pull origin main
+cp .env.example .env
+docker compose up -d --build --remove-orphans
+docker compose ps
+```
+
+部署后可用以下命令检查服务状态：
+
+```bash
+curl http://127.0.0.1:8000/health
+docker compose logs -f backend
+```
+
+默认端口：
+- 前端：`3000`
+- 后端 API：`8000`
+- PostgreSQL：容器内部 `5432`
+- Redis：容器内部 `6379`
 
 ### 本地开发
 

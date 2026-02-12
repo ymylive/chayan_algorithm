@@ -1,0 +1,16 @@
+# Development overrides - exposes DB/Redis ports to host for local debugging.
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.override.yml up
+version: '3.8'
+
+services:
+  postgres:
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  backend:
+    environment:
+      NODE_ENV: development
