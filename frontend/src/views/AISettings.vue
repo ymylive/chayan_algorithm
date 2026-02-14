@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="ai-settings-page">
     <div class="content-shell">
       <div class="section-title">
@@ -10,17 +10,69 @@
         <el-form label-width="140px" :model="form" class="settings-form">
           <div class="group-grid">
             <div class="settings-group">
-              <div class="group-title">连接配置</div>
+              <div class="group-title">主服务配置</div>
               <el-form-item label="AI API 地址">
                 <el-input v-model="form.apiEndpoint" placeholder="https://openrouter.ai/api/v1" clearable />
               </el-form-item>
 
               <el-form-item label="API Key">
-                <el-input v-model="form.apiKey" type="password" show-password placeholder="请输�?API Key" clearable />
+                <el-input
+                  v-model="form.apiKey"
+                  type="password"
+                  show-password
+                  placeholder="请输入 API Key（留空则保持现有）"
+                  clearable
+                />
               </el-form-item>
 
-              <el-form-item label="模型名称">
+              <el-form-item label="主模型">
                 <el-input v-model="form.model" placeholder="tngtech/deepseek-r1t2-chimera:free" clearable />
+              </el-form-item>
+
+              <el-form-item label="协议类型">
+                <el-select v-model="form.protocol" class="full-width" placeholder="请选择协议">
+                  <el-option label="Chat Completions" value="chat_completions" />
+                  <el-option label="Responses" value="responses" />
+                </el-select>
+              </el-form-item>
+            </div>
+
+            <div class="settings-group">
+              <div class="group-title">回退链配置</div>
+              <el-form-item label="单模型回退">
+                <el-input v-model="form.fallbackModel" placeholder="可选：当主模型失败时使用" clearable />
+              </el-form-item>
+
+              <el-form-item label="模型回退链">
+                <el-input
+                  v-model="form.modelFallbacks"
+                  type="textarea"
+                  :rows="3"
+                  placeholder="逗号分隔，例如 model/a, model/b"
+                />
+              </el-form-item>
+            </div>
+          </div>
+
+          <div class="group-grid">
+            <div class="settings-group">
+              <div class="group-title">次级服务（可选）</div>
+              <el-form-item label="次级 API 地址">
+                <el-input v-model="form.secondaryApiEndpoint" placeholder="https://openrouter.ai/api/v1" clearable />
+              </el-form-item>
+
+              <el-form-item label="次级 API Key">
+                <el-input
+                  v-model="form.secondaryApiKey"
+                  type="password"
+                  show-password
+                  placeholder="请输入次级 API Key（留空则保持现有）"
+                  clearable
+                />
+              </el-form-item>
+
+              <el-form-item label="次级模型">
+                <el-input v-model="form.secondaryModel" placeholder="例如 openai/gpt-4o-mini" clearable />
               </el-form-item>
             </div>
 
@@ -39,17 +91,14 @@
                 </div>
               </el-form-item>
 
-              <el-form-item label="最�?Tokens">
+              <el-form-item label="最大 Tokens">
                 <el-input-number v-model="form.maxTokens" :min="64" :max="8192" :step="64" />
               </el-form-item>
-            </div>
-          </div>
 
-          <div class="settings-group">
-            <div class="group-title">开发选项</div>
-            <el-form-item label="启用 Mock">
-              <el-switch v-model="form.useMock" />
-            </el-form-item>
+              <el-form-item label="启用 Mock">
+                <el-switch v-model="form.useMock" />
+              </el-form-item>
+            </div>
           </div>
 
           <el-form-item class="action-row">
@@ -58,7 +107,7 @@
           </el-form-item>
         </el-form>
 
-        <div class="help-tip">配置将保存到后端服务端存储中</div>
+        <div class="help-tip">配置将按当前登录用户单独保存，密钥字段保存后会重新掩码显示</div>
       </el-card>
     </div>
   </div>
@@ -70,41 +119,130 @@ import { ElMessage } from 'element-plus'
 import { Setting } from '@element-plus/icons-vue'
 import request from '../utils/request'
 
+const SECRET_MASK = '********'
+const PROTOCOLS = ['chat_completions', 'responses'] as const
+
+type ProtocolType = (typeof PROTOCOLS)[number]
+
 type AISettings = {
   apiEndpoint: string
   apiKey: string
   model: string
+  protocol: ProtocolType
+  fallbackModel: string
+  modelFallbacks: string
+  secondaryApiEndpoint: string
+  secondaryApiKey: string
+  secondaryModel: string
   temperature: number
   maxTokens: number
   useMock: boolean
+}
+
+type AISettingsPayload = Partial<AISettings> & {
+  modelFallbacks?: string | string[]
 }
 
 const defaultSettings: AISettings = {
   apiEndpoint: 'https://openrouter.ai/api/v1',
   apiKey: '',
   model: 'tngtech/deepseek-r1t2-chimera:free',
-  temperature: 0.7,
-  maxTokens: 2048,
-  useMock: true,
+  protocol: 'chat_completions',
+  fallbackModel: '',
+  modelFallbacks: '',
+  secondaryApiEndpoint: '',
+  secondaryApiKey: '',
+  secondaryModel: '',
+  temperature: 0.35,
+  maxTokens: 1400,
+  useMock: false,
 }
 
 const form = reactive<AISettings>({ ...defaultSettings })
 
-const applySettings = (settings: Partial<AISettings> | undefined) => {
+const normalizeModelFallbacks = (value: unknown) => {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim()).filter(Boolean).join(', ')
+  }
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .join(', ')
+  }
+  return ''
+}
+
+const normalizeProtocol = (value: unknown): ProtocolType => {
+  if (value === 'responses') {
+    return 'responses'
+  }
+  return 'chat_completions'
+}
+
+const sanitizeSecretWrite = (value: string) => {
+  const trimmed = value.trim()
+  if (!trimmed || trimmed === SECRET_MASK) {
+    return ''
+  }
+  return trimmed
+}
+
+const applySettings = (settings: AISettingsPayload | undefined) => {
   Object.assign(form, {
     apiEndpoint: settings?.apiEndpoint || defaultSettings.apiEndpoint,
     apiKey: settings?.apiKey || '',
     model: settings?.model || defaultSettings.model,
+    protocol: normalizeProtocol(settings?.protocol),
+    fallbackModel: settings?.fallbackModel || '',
+    modelFallbacks: normalizeModelFallbacks(settings?.modelFallbacks),
+    secondaryApiEndpoint: settings?.secondaryApiEndpoint || '',
+    secondaryApiKey: settings?.secondaryApiKey || '',
+    secondaryModel: settings?.secondaryModel || '',
     temperature: typeof settings?.temperature === 'number' ? settings.temperature : defaultSettings.temperature,
     maxTokens: typeof settings?.maxTokens === 'number' ? settings.maxTokens : defaultSettings.maxTokens,
     useMock: typeof settings?.useMock === 'boolean' ? settings.useMock : defaultSettings.useMock,
   })
 }
 
+const validateForm = () => {
+  if (!form.apiEndpoint.trim()) {
+    ElMessage.warning('请先填写 AI API 地址')
+    return false
+  }
+
+  if (!form.model.trim()) {
+    ElMessage.warning('请先填写主模型名称')
+    return false
+  }
+
+  if (!PROTOCOLS.includes(form.protocol)) {
+    ElMessage.warning('请选择有效的协议类型')
+    return false
+  }
+
+  const hasSecondary = Boolean(
+    form.secondaryApiEndpoint.trim() || form.secondaryApiKey.trim() || form.secondaryModel.trim()
+  )
+  if (hasSecondary) {
+    if (!form.secondaryApiEndpoint.trim()) {
+      ElMessage.warning('请补充次级 API 地址')
+      return false
+    }
+    if (!form.secondaryModel.trim()) {
+      ElMessage.warning('请补充次级模型名称')
+      return false
+    }
+  }
+
+  return true
+}
+
 const loadSettings = async () => {
   try {
     const res = await request.get('/settings/ai')
-    const payload = (res?.data ?? res) as { data?: Partial<AISettings> }
+    const payload = (res?.data ?? res) as { data?: AISettingsPayload }
     applySettings(payload?.data)
   } catch {
     applySettings(defaultSettings)
@@ -112,43 +250,62 @@ const loadSettings = async () => {
   }
 }
 
-const saveSettings = () => {
-  if (!form.apiEndpoint) {
-    ElMessage.warning('请先填写 AI API 地址')
+const saveSettings = async () => {
+  if (!validateForm()) {
     return
   }
 
-  request.post('/settings/ai', {
-    apiEndpoint: form.apiEndpoint,
-    apiKey: form.apiKey,
-    model: form.model,
-    temperature: form.temperature,
-    maxTokens: form.maxTokens,
-    useMock: form.useMock,
-  }).then(() => {
+  try {
+    await request.post('/settings/ai', {
+      apiEndpoint: form.apiEndpoint.trim(),
+      apiKey: sanitizeSecretWrite(form.apiKey),
+      model: form.model.trim(),
+      protocol: form.protocol,
+      fallbackModel: form.fallbackModel.trim(),
+      modelFallbacks: form.modelFallbacks,
+      secondaryApiEndpoint: form.secondaryApiEndpoint.trim(),
+      secondaryApiKey: sanitizeSecretWrite(form.secondaryApiKey),
+      secondaryModel: form.secondaryModel.trim(),
+      temperature: form.temperature,
+      maxTokens: form.maxTokens,
+      useMock: form.useMock,
+    })
+
     ElMessage.success('AI settings saved')
     if (form.apiKey) {
       form.apiKey = '********'
     }
-  }).catch(() => {
+    if (form.secondaryApiKey) {
+      form.secondaryApiKey = SECRET_MASK
+    }
+  } catch {
     ElMessage.error('保存 AI 设置失败')
-  })
+  }
 }
 
-const resetSettings = () => {
+const resetSettings = async () => {
   Object.assign(form, defaultSettings)
-  request.post('/settings/ai', {
-    apiEndpoint: defaultSettings.apiEndpoint,
-    apiKey: '',
-    model: defaultSettings.model,
-    temperature: defaultSettings.temperature,
-    maxTokens: defaultSettings.maxTokens,
-    useMock: defaultSettings.useMock,
-  }).then(() => {
+
+  try {
+    await request.post('/settings/ai', {
+      apiEndpoint: defaultSettings.apiEndpoint,
+      apiKey: '',
+      model: defaultSettings.model,
+      protocol: defaultSettings.protocol,
+      fallbackModel: defaultSettings.fallbackModel,
+      modelFallbacks: defaultSettings.modelFallbacks,
+      secondaryApiEndpoint: defaultSettings.secondaryApiEndpoint,
+      secondaryApiKey: '',
+      secondaryModel: defaultSettings.secondaryModel,
+      temperature: defaultSettings.temperature,
+      maxTokens: defaultSettings.maxTokens,
+      useMock: defaultSettings.useMock,
+    })
+
     ElMessage.success('Defaults restored')
-  }).catch(() => {
+  } catch {
     ElMessage.error('恢复默认设置失败')
-  })
+  }
 }
 
 onMounted(() => {
@@ -187,6 +344,10 @@ onMounted(() => {
 
 .settings-form {
   max-width: 920px;
+}
+
+.full-width {
+  width: 100%;
 }
 
 .group-grid {

@@ -85,6 +85,7 @@
             <el-icon><User /></el-icon>
           </span>
           <span class="user-name">管理员</span>
+          <el-button class="logout-button" text @click="handleLogout">退出登录</el-button>
         </div>
       </el-header>
 
@@ -97,7 +98,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   Cpu,
   DataLine,
@@ -109,6 +110,7 @@ import {
   Upload,
   User
 } from '@element-plus/icons-vue'
+import request from '../utils/request'
 
 const MOBILE_BREAKPOINT = 992
 
@@ -116,6 +118,7 @@ const isCollapsed = ref(false)
 const isMobile = ref(typeof window !== 'undefined' ? window.innerWidth <= MOBILE_BREAKPOINT : false)
 const mobileMenuOpen = ref(false)
 const route = useRoute()
+const router = useRouter()
 
 const menuCollapsed = computed(() => !isMobile.value && isCollapsed.value)
 
@@ -169,6 +172,17 @@ const closeMobileMenu = () => {
 const handleMenuSelect = () => {
   if (isMobile.value) {
     closeMobileMenu()
+  }
+}
+
+const handleLogout = async () => {
+  try {
+    await request.post('/auth/logout')
+  } catch {
+  } finally {
+    sessionStorage.removeItem('session_active')
+    localStorage.removeItem('token')
+    await router.replace('/login')
   }
 }
 
@@ -347,6 +361,14 @@ onBeforeUnmount(() => {
 
 .user-name {
   font-size: 14px;
+}
+
+.logout-button {
+  color: #606266;
+}
+
+.logout-button:hover {
+  color: #1a73e8;
 }
 
 .content-area {

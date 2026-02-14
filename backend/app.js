@@ -114,11 +114,15 @@ app.use(express.json());
 
 app.get('/health', healthController.healthCheck);
 
-// Public authentication endpoint
+// Public authentication endpoints
+app.post('/api/auth/register', authController.register);
 app.post('/api/auth/login', loginRateLimit, authController.login);
 
 // All /api/* routes require authentication
 app.use('/api', authMiddleware);
+
+app.post('/api/auth/logout', authController.logout);
+app.get('/api/auth/me', authController.me);
 
 app.post('/api/upload', upload.single('file'), handleUpload);
 app.post('/api/analyze', analyzeController.analyze);

@@ -1,9 +1,21 @@
-import { beforeEach, describe, expect, test } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
+import request from '../utils/request'
+
+vi.mock('../utils/request', () => ({
+  default: {
+    get: vi.fn()
+  }
+}))
+
 import router from './index'
+
+const requestGet = vi.mocked(request.get)
 
 describe('router', () => {
   beforeEach(async () => {
     sessionStorage.clear()
+    requestGet.mockReset()
+    requestGet.mockResolvedValue({ success: true })
     await router.push('/login')
   })
 
@@ -11,6 +23,7 @@ describe('router', () => {
     const routeMap = new Map(router.getRoutes().map((route) => [route.path, route]))
 
     expect(routeMap.get('/login')?.meta.requiresAuth).toBe(false)
+    expect(routeMap.get('/register')?.meta.requiresAuth).toBe(false)
 
     const protectedPaths = ['/', '/upload', '/analysis', '/recommendations', '/ai-analyze', '/ai-settings']
     for (const path of protectedPaths) {
@@ -19,6 +32,8 @@ describe('router', () => {
   })
 
   test('redirects unauthenticated access to login with redirect query', async () => {
+    requestGet.mockRejectedValueOnce(new Error('unauthorized'))
+
     await router.push('/analysis')
 
     expect(router.currentRoute.value.path).toBe('/login')
@@ -30,6 +45,15 @@ describe('router', () => {
 
     await router.push('/analysis')
 
+    expect(router.currentRoute.value.path).toBe('/analysis')
+    expect(requestGet).not.toHaveBeenCalled()
+  })
+
+  test('bootstraps session via me endpoint for protected route', async () => {
+    await router.push('/analysis')
+
+    expect(requestGet).toHaveBeenCalledWith('/auth/me')
+    expect(sessionStorage.getItem('session_active')).toBe('1')
     expect(router.currentRoute.value.path).toBe('/analysis')
   })
 
@@ -47,5 +71,13 @@ describe('router', () => {
     await router.push('/login?redirect=/login')
 
     expect(router.currentRoute.value.path).toBe('/')
+  })
+
+  test('redirects authenticated register access to requested route', async () => {
+    sessionStorage.setItem('session_active', '1')
+
+    await router.push('/register?redirect=/upload')
+
+    expect(router.currentRoute.value.path).toBe('/upload')
   })
 })

@@ -286,6 +286,28 @@ const form = reactive({
 const loading = ref(false)
 const result = ref<any>(null)
 
+type AIAnalyzeApiResponse = {
+  success?: boolean
+  message?: string
+  error?: string
+  retryable?: boolean
+  retryAfter?: number
+  limitHint?: string
+  data?: any
+}
+
+const AI_AUTO_RETRY_MAX = 1
+
+const waitFor = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+const getRetryDelaySeconds = (err: any) => {
+  const fromBackend = Number(err?.response?.data?.retryAfter || 0)
+  if (Number.isFinite(fromBackend) && fromBackend > 0) {
+    return Math.min(Math.max(Math.round(fromBackend), 2), 30)
+  }
+  return 5
+}
+
 const safeNumber = (value: unknown, fallback = 0) => {
   const num = Number(value)
   return Number.isFinite(num) ? num : fallback
@@ -753,16 +775,78 @@ const runAnalyze = async () => {
   }
 
   loading.value = true
+  const target = form.target.trim()
+  let lastError: any = null
+
   try {
-    const response = await request.post('/mcp/ai-analyze', { target: form.target.trim() })
-    const res = response?.data || response
-    if (!res?.success) {
-      throw new Error(res?.message || '分析失败')
+    for (let attempt = 0; attempt <= AI_AUTO_RETRY_MAX; attempt++) {
+      try {
+        const response = await request.post('/mcp/ai-analyze', { target })
+        const payload = response as AIAnalyzeApiResponse | { data?: AIAnalyzeApiResponse }
+        const res: AIAnalyzeApiResponse =
+          (payload as AIAnalyzeApiResponse)?.success !== undefined
+            ? (payload as AIAnalyzeApiResponse)
+            : ((payload as { data?: AIAnalyzeApiResponse })?.data || {})
+
+        if (!res?.success) {
+          throw new Error(res?.message || res?.error || '分析失败')
+        }
+
+        result.value = res.data
+        ElMessage.success(attempt > 0 ? 'AI 分析完成（已自动重试）' : 'AI 分析完成')
+        return
+      } catch (err: any) {
+        lastError = err
+        const status = Number(err?.response?.status || 0)
+        const retryable = Boolean(err?.response?.data?.retryable) || status === 429 || status === 504
+
+        if (retryable && attempt < AI_AUTO_RETRY_MAX) {
+          const waitSeconds = getRetryDelaySeconds(err)
+          ElMessage.warning(`AI 限流，${waitSeconds} 秒后自动重试...`)
+          await waitFor(waitSeconds * 1000)
+          continue
+        }
+
+        break
+      }
     }
-    result.value = res.data
-    ElMessage.success('AI 分析完成')
-  } catch (err: any) {
-    ElMessage.error(err?.message || 'AI 分析失败')
+
+    const backendMessage = lastError?.response?.data?.message || lastError?.response?.data?.error
+    const limitHint = lastError?.response?.data?.limitHint
+    const isNetworkError = !lastError?.response && (
+      lastError?.code === 'ERR_NETWORK' ||
+      /network error/i.test(String(lastError?.message || ''))
+    )
+
+    if (isNetworkError) {
+      ElMessage.warning('网络连接异常，正在自动重试一次...')
+      await waitFor(4000)
+      try {
+        const retryResponse = await request.post('/mcp/ai-analyze', { target })
+        const retryPayload = retryResponse as AIAnalyzeApiResponse | { data?: AIAnalyzeApiResponse }
+        const retryRes: AIAnalyzeApiResponse =
+          (retryPayload as AIAnalyzeApiResponse)?.success !== undefined
+            ? (retryPayload as AIAnalyzeApiResponse)
+            : ((retryPayload as { data?: AIAnalyzeApiResponse })?.data || {})
+        if (retryRes?.success) {
+          result.value = retryRes.data
+          ElMessage.success('AI 分析完成（网络恢复后自动重试成功）')
+          return
+        }
+      } catch {
+        // fallthrough to final network guidance
+      }
+      ElMessage.error('网络连接异常：请使用 https://chayan.cornna.xyz（不要用 https://82.158.88.34:3000）')
+      return
+    }
+
+    if (limitHint === 'provider_rate_limited') {
+      ElMessage.error(backendMessage || 'AI 服务限流，请稍后重试')
+    } else if (limitHint === 'provider_timeout') {
+      ElMessage.error(backendMessage || 'AI 服务响应超时，请稍后重试')
+    } else {
+      ElMessage.error(backendMessage || lastError?.message || 'AI 分析失败')
+    }
   } finally {
     loading.value = false
   }

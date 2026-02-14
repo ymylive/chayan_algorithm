@@ -113,7 +113,57 @@ describe('auth middleware', () => {
       audience: 'audience-y'
     });
     expect(next).toHaveBeenCalledTimes(1);
-    expect(req.user).toEqual({ sub: 'u1' });
+    expect(req.user).toEqual({
+      sub: 'u1',
+      id: null,
+      email: null,
+      username: null,
+      role: null
+    });
+  });
+
+  test('normalizes legacy auth payload claims', () => {
+    process.env.JWT_SECRET = 'secret';
+    const verify = jest.fn().mockReturnValue({ username: 'admin', role: 'admin' });
+
+    jest.doMock('jsonwebtoken', () => ({ verify }));
+
+    const authMiddleware = require('../src/middleware/auth');
+    const req = { path: '/api/enterprises', headers: { authorization: 'Bearer legacy-token' } };
+    const res = buildRes();
+    const next = jest.fn();
+
+    authMiddleware(req, res, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(req.user).toEqual({
+      username: 'admin',
+      role: 'admin',
+      id: null,
+      email: null
+    });
+  });
+
+  test('normalizes new auth payload claims', () => {
+    process.env.JWT_SECRET = 'secret';
+    const verify = jest.fn().mockReturnValue({ id: 5, email: 'member@example.com', role: 'user' });
+
+    jest.doMock('jsonwebtoken', () => ({ verify }));
+
+    const authMiddleware = require('../src/middleware/auth');
+    const req = { path: '/api/enterprises', headers: { authorization: 'Bearer user-token' } };
+    const res = buildRes();
+    const next = jest.fn();
+
+    authMiddleware(req, res, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(req.user).toEqual({
+      id: 5,
+      email: 'member@example.com',
+      role: 'user',
+      username: null
+    });
   });
 
   test('uses auth_token cookie when bearer header is missing', () => {

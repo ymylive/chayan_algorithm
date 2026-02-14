@@ -52,6 +52,11 @@
             登录
           </el-button>
         </el-form-item>
+
+        <div class="auth-link-row">
+          <span>还没有账号？</span>
+          <router-link class="auth-link" to="/register">立即注册</router-link>
+        </div>
       </el-form>
     </div>
   </div>
@@ -211,6 +216,23 @@ const handleLogin = async () => {
   border-radius: 8px;
   font-size: 15px;
   font-weight: 500;
+}
+
+.auth-link-row {
+  margin-top: 4px;
+  text-align: center;
+  font-size: 14px;
+  color: #606266;
+}
+
+.auth-link {
+  margin-left: 6px;
+  color: #1a73e8;
+  text-decoration: none;
+}
+
+.auth-link:hover {
+  text-decoration: underline;
 }
 
 @media (max-width: 480px) {

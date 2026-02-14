@@ -41,6 +41,18 @@ const getTokenFromRequest = (req) => {
   return getCookieValue(req.headers.cookie, 'auth_token');
 };
 
+const normalizeUserClaims = (claims) => {
+  const safeClaims = claims && typeof claims === 'object' && !Array.isArray(claims) ? claims : {};
+
+  return {
+    ...safeClaims,
+    id: safeClaims.id ?? null,
+    email: typeof safeClaims.email === 'string' && safeClaims.email.trim() ? safeClaims.email : null,
+    username: typeof safeClaims.username === 'string' && safeClaims.username.trim() ? safeClaims.username : null,
+    role: typeof safeClaims.role === 'string' && safeClaims.role.trim() ? safeClaims.role : null
+  };
+};
+
 const authMiddleware = (req, res, next) => {
   if (PUBLIC_PATHS.includes(req.path)) return next();
 
@@ -63,11 +75,12 @@ const authMiddleware = (req, res, next) => {
   const audience = process.env.JWT_AUDIENCE || 'chayan-frontend';
 
   try {
-    req.user = jwt.verify(token, secret, {
+    const claims = jwt.verify(token, secret, {
       algorithms: ['HS256'],
       issuer,
       audience
     });
+    req.user = normalizeUserClaims(claims);
   } catch (err) {
     logger.warn('JWT verification failed:', err.message);
     return res.status(401).json({ success: false, message: 'Invalid or expired token' });
