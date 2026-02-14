@@ -22,8 +22,13 @@ describe('AISettings view contract', () => {
     expect(source).toContain('fallbackModel: form.fallbackModel')
     expect(source).toContain('modelFallbacks: form.modelFallbacks')
     expect(source).toContain('secondaryApiEndpoint: form.secondaryApiEndpoint')
+    expect(source).toContain('secondaryProtocol: form.secondaryProtocol')
     expect(source).toContain('secondaryApiKey: sanitizeSecretWrite(form.secondaryApiKey)')
     expect(source).toContain('secondaryModel: form.secondaryModel')
+    expect(source).toContain('tertiaryApiEndpoint: form.tertiaryApiEndpoint')
+    expect(source).toContain('tertiaryProtocol: form.tertiaryProtocol')
+    expect(source).toContain('tertiaryApiKey: sanitizeSecretWrite(form.tertiaryApiKey)')
+    expect(source).toContain('tertiaryModel: form.tertiaryModel')
   })
 
   test('preserves masked secret behavior and explicit validation messages', () => {

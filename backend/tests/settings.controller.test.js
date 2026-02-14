@@ -192,8 +192,13 @@ describe('settingsController', () => {
       fallbackModel: 'old/fallback',
       modelFallbacks: 'old/a,old/b',
       secondaryApiEndpoint: 'https://secondary.old/v1',
+      secondaryProtocol: 'chat_completions',
       secondaryApiKey: 'secondary-secret',
       secondaryModel: 'old/secondary',
+      tertiaryApiEndpoint: 'https://openrouter.ai/api/v1',
+      tertiaryProtocol: 'chat_completions',
+      tertiaryApiKey: 'tertiary-secret',
+      tertiaryModel: 'third/model',
       temperature: 0.33,
       maxTokens: 1400,
       useMock: false
@@ -209,6 +214,7 @@ describe('settingsController', () => {
             fallbackModel: 'next/fallback',
             modelFallbacks: 'first/model,second/model',
             secondaryApiEndpoint: 'https://secondary.new/v1',
+            secondaryProtocol: 'chat_completions',
             secondaryModel: 'next/secondary'
           }
         }]
@@ -222,8 +228,13 @@ describe('settingsController', () => {
         fallbackModel: 'next/fallback',
         modelFallbacks: [' first/model ', 'second/model', 'first/model'],
         secondaryApiEndpoint: 'https://secondary.new/v1',
+        secondaryProtocol: 'openai-completions',
         secondaryApiKey: '********',
-        secondaryModel: 'next/secondary'
+        secondaryModel: 'next/secondary',
+        tertiaryApiEndpoint: 'https://openrouter.ai/api/v1',
+        tertiaryProtocol: 'openai-completions',
+        tertiaryApiKey: '********',
+        tertiaryModel: 'third/model'
       }
     };
     const res = buildRes();
@@ -237,8 +248,13 @@ describe('settingsController', () => {
         fallbackModel: 'next/fallback',
         modelFallbacks: 'first/model,second/model',
         secondaryApiEndpoint: 'https://secondary.new/v1',
+        secondaryProtocol: 'chat_completions',
         secondaryApiKey: 'secondary-secret',
-        secondaryModel: 'next/secondary'
+        secondaryModel: 'next/secondary',
+        tertiaryApiEndpoint: 'https://openrouter.ai/api/v1',
+        tertiaryProtocol: 'chat_completions',
+        tertiaryApiKey: 'tertiary-secret',
+        tertiaryModel: 'third/model'
       })]
     );
     expect(res.json).toHaveBeenCalledWith({ success: true, message: 'Settings updated' });
@@ -328,8 +344,13 @@ describe('settingsController', () => {
           fallbackModel: 'fallback/model',
           modelFallbacks: 'fb1,fb2',
           secondaryApiEndpoint: 'https://secondary.example/v1',
+          secondaryProtocol: 'chat_completions',
           secondaryApiKey: 'secondary-secret',
           secondaryModel: 'secondary/model',
+          tertiaryApiEndpoint: 'https://openrouter.ai/api/v1',
+          tertiaryProtocol: 'chat_completions',
+          tertiaryApiKey: 'tertiary-secret',
+          tertiaryModel: 'third/model',
           temperature: 0.35,
           maxTokens: 1400,
           useMock: false
@@ -349,9 +370,14 @@ describe('settingsController', () => {
         fallbackModel: 'fallback/model',
         modelFallbacks: 'fb1,fb2',
         secondaryApiEndpoint: 'https://secondary.example/v1',
+        secondaryProtocol: 'chat_completions',
         secondaryModel: 'secondary/model',
+        tertiaryApiEndpoint: 'https://openrouter.ai/api/v1',
+        tertiaryProtocol: 'chat_completions',
+        tertiaryModel: 'third/model',
         apiKey: '********',
-        secondaryApiKey: '********'
+        secondaryApiKey: '********',
+        tertiaryApiKey: '********'
       })
     });
   });

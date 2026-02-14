@@ -65,7 +65,7 @@ const buildCompetitorQueries = (target, maxVariants) => {
 
 const mergeCompetitorSearchResults = (target, queries, settledResults) => {
   const mergedByName = new Map();
-  const sourceCounts = { mcp: 0, github: 0 };
+  const sourceCounts = {};
   const sourceSet = new Set();
   const attempts = [];
   let partialFailure = false;
@@ -87,17 +87,19 @@ const mergeCompetitorSearchResults = (target, queries, settledResults) => {
     const list = normalizeList(payload);
     const meta = payload?.meta || {};
     const listedSources = new Set((meta.sourcesUsed || []).map((v) => String(v || '').toLowerCase()).filter(Boolean));
-    const mcpCount = Number(meta?.sourceCounts?.mcp || 0);
-    const githubCount = Number(meta?.sourceCounts?.github || 0);
 
-    if (mcpCount > 0 || githubCount > 0) {
-      sourceCounts.mcp += mcpCount;
-      sourceCounts.github += githubCount;
+    const sourceCountEntries = Object.entries(meta?.sourceCounts || {})
+      .map(([rawSource, rawCount]) => [String(rawSource || '').toLowerCase(), Number(rawCount || 0)]);
+
+    if (sourceCountEntries.length > 0) {
+      sourceCountEntries.forEach(([source, count]) => {
+        if (!source) return;
+        sourceCounts[source] = Number(sourceCounts[source] || 0) + Math.max(0, count);
+      });
     } else {
       list.forEach((item) => {
         const source = String(item?.source || 'mcp').toLowerCase();
-        if (source === 'github') sourceCounts.github += 1;
-        else sourceCounts.mcp += 1;
+        sourceCounts[source] = Number(sourceCounts[source] || 0) + 1;
       });
     }
 
@@ -321,8 +323,10 @@ exports.aiAnalyze = async (req, res, next) => {
       topIndustries.length > 0
         ? `上传数据行业分布TOP：${topIndustries.map((i) => `${i.name}(${i.count})`).join('、')}`
         : '上传数据行业字段较少，行业分布信息不足',
-      (Number(competitorSourceCounts.mcp || 0) + Number(competitorSourceCounts.github || 0)) > 0
-        ? `竞品信号来源：MCP ${Number(competitorSourceCounts.mcp || 0)} 条，GitHub ${Number(competitorSourceCounts.github || 0)} 条`
+      Object.values(competitorSourceCounts).some((count) => Number(count || 0) > 0)
+        ? `竞品信号来源：${Object.entries(competitorSourceCounts)
+          .map(([source, count]) => `${String(source).toUpperCase()} ${Number(count || 0)} 条`)
+          .join('，')}`
         : `竞品信号条数：${competitorList.length}`,
       `模型方法：${modelResult.method}`,
       `TOPSIS 趋势（Theil-Sen）：${modelResult.trendLabel}（斜率 ${modelResult.trendSlope}）`,
@@ -425,8 +429,7 @@ exports.aiAnalyze = async (req, res, next) => {
         },
         mcp: {
           industryData,
-          competitorData,
-          githubData: (normalizeList(competitorData) || []).filter((item) => String(item?.source || '').toLowerCase() === 'github')
+          competitorData
         },
         peerAnalysis: {
           peers: peerRows,

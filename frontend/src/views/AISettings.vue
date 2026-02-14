@@ -12,7 +12,7 @@
             <div class="settings-group">
               <div class="group-title">主服务配置</div>
               <el-form-item label="AI API 地址">
-                <el-input v-model="form.apiEndpoint" placeholder="https://openrouter.ai/api/v1" clearable />
+                <el-input v-model="form.apiEndpoint" placeholder="https://gmn.chuangzuoli.com/v1" clearable />
               </el-form-item>
 
               <el-form-item label="API Key">
@@ -26,13 +26,13 @@
               </el-form-item>
 
               <el-form-item label="主模型">
-                <el-input v-model="form.model" placeholder="tngtech/deepseek-r1t2-chimera:free" clearable />
+                <el-input v-model="form.model" placeholder="gpt-5.2" clearable />
               </el-form-item>
 
               <el-form-item label="协议类型">
                 <el-select v-model="form.protocol" class="full-width" placeholder="请选择协议">
-                  <el-option label="Chat Completions" value="chat_completions" />
-                  <el-option label="Responses" value="responses" />
+                  <el-option label="OpenAI Responses" value="responses" />
+                  <el-option label="兼容协议 (OpenAI Completions)" value="chat_completions" />
                 </el-select>
               </el-form-item>
             </div>
@@ -58,7 +58,14 @@
             <div class="settings-group">
               <div class="group-title">次级服务（可选）</div>
               <el-form-item label="次级 API 地址">
-                <el-input v-model="form.secondaryApiEndpoint" placeholder="https://openrouter.ai/api/v1" clearable />
+                <el-input v-model="form.secondaryApiEndpoint" placeholder="https://api-inference.modelscope.cn/v1" clearable />
+              </el-form-item>
+
+              <el-form-item label="次级协议">
+                <el-select v-model="form.secondaryProtocol" class="full-width" placeholder="请选择协议">
+                  <el-option label="OpenAI Responses" value="responses" />
+                  <el-option label="兼容协议 (OpenAI Completions)" value="chat_completions" />
+                </el-select>
               </el-form-item>
 
               <el-form-item label="次级 API Key">
@@ -72,7 +79,35 @@
               </el-form-item>
 
               <el-form-item label="次级模型">
-                <el-input v-model="form.secondaryModel" placeholder="例如 openai/gpt-4o-mini" clearable />
+                <el-input v-model="form.secondaryModel" placeholder="ZhipuAI/GLM-5" clearable />
+              </el-form-item>
+            </div>
+
+            <div class="settings-group">
+              <div class="group-title">第三级服务（可选）</div>
+              <el-form-item label="三级 API 地址">
+                <el-input v-model="form.tertiaryApiEndpoint" placeholder="https://openrouter.ai/api/v1" clearable />
+              </el-form-item>
+
+              <el-form-item label="三级协议">
+                <el-select v-model="form.tertiaryProtocol" class="full-width" placeholder="请选择协议">
+                  <el-option label="OpenAI Responses" value="responses" />
+                  <el-option label="兼容协议 (OpenAI Completions)" value="chat_completions" />
+                </el-select>
+              </el-form-item>
+
+              <el-form-item label="三级 API Key">
+                <el-input
+                  v-model="form.tertiaryApiKey"
+                  type="password"
+                  show-password
+                  placeholder="请输入三级 API Key（留空则保持现有）"
+                  clearable
+                />
+              </el-form-item>
+
+              <el-form-item label="三级模型">
+                <el-input v-model="form.tertiaryModel" placeholder="deepseek/deepseek-r1-0528:free" clearable />
               </el-form-item>
             </div>
 
@@ -132,8 +167,13 @@ type AISettings = {
   fallbackModel: string
   modelFallbacks: string
   secondaryApiEndpoint: string
+  secondaryProtocol: ProtocolType
   secondaryApiKey: string
   secondaryModel: string
+  tertiaryApiEndpoint: string
+  tertiaryProtocol: ProtocolType
+  tertiaryApiKey: string
+  tertiaryModel: string
   temperature: number
   maxTokens: number
   useMock: boolean
@@ -144,15 +184,20 @@ type AISettingsPayload = Partial<AISettings> & {
 }
 
 const defaultSettings: AISettings = {
-  apiEndpoint: 'https://openrouter.ai/api/v1',
+  apiEndpoint: 'https://gmn.chuangzuoli.com/v1',
   apiKey: '',
-  model: 'tngtech/deepseek-r1t2-chimera:free',
-  protocol: 'chat_completions',
-  fallbackModel: '',
+  model: 'gpt-5.2',
+  protocol: 'responses',
+  fallbackModel: 'gpt-5.2',
   modelFallbacks: '',
-  secondaryApiEndpoint: '',
+  secondaryApiEndpoint: 'https://api-inference.modelscope.cn/v1',
+  secondaryProtocol: 'chat_completions',
   secondaryApiKey: '',
-  secondaryModel: '',
+  secondaryModel: 'ZhipuAI/GLM-5',
+  tertiaryApiEndpoint: 'https://openrouter.ai/api/v1',
+  tertiaryProtocol: 'chat_completions',
+  tertiaryApiKey: '',
+  tertiaryModel: 'deepseek/deepseek-r1-0528:free',
   temperature: 0.35,
   maxTokens: 1400,
   useMock: false,
@@ -198,8 +243,13 @@ const applySettings = (settings: AISettingsPayload | undefined) => {
     fallbackModel: settings?.fallbackModel || '',
     modelFallbacks: normalizeModelFallbacks(settings?.modelFallbacks),
     secondaryApiEndpoint: settings?.secondaryApiEndpoint || '',
+    secondaryProtocol: normalizeProtocol(settings?.secondaryProtocol),
     secondaryApiKey: settings?.secondaryApiKey || '',
     secondaryModel: settings?.secondaryModel || '',
+    tertiaryApiEndpoint: settings?.tertiaryApiEndpoint || '',
+    tertiaryProtocol: normalizeProtocol(settings?.tertiaryProtocol),
+    tertiaryApiKey: settings?.tertiaryApiKey || '',
+    tertiaryModel: settings?.tertiaryModel || '',
     temperature: typeof settings?.temperature === 'number' ? settings.temperature : defaultSettings.temperature,
     maxTokens: typeof settings?.maxTokens === 'number' ? settings.maxTokens : defaultSettings.maxTokens,
     useMock: typeof settings?.useMock === 'boolean' ? settings.useMock : defaultSettings.useMock,
@@ -234,6 +284,28 @@ const validateForm = () => {
       ElMessage.warning('请补充次级模型名称')
       return false
     }
+    if (!PROTOCOLS.includes(form.secondaryProtocol)) {
+      ElMessage.warning('请选择有效的次级协议类型')
+      return false
+    }
+  }
+
+  const hasTertiary = Boolean(
+    form.tertiaryApiEndpoint.trim() || form.tertiaryApiKey.trim() || form.tertiaryModel.trim()
+  )
+  if (hasTertiary) {
+    if (!form.tertiaryApiEndpoint.trim()) {
+      ElMessage.warning('请补充三级 API 地址')
+      return false
+    }
+    if (!form.tertiaryModel.trim()) {
+      ElMessage.warning('请补充三级模型名称')
+      return false
+    }
+    if (!PROTOCOLS.includes(form.tertiaryProtocol)) {
+      ElMessage.warning('请选择有效的三级协议类型')
+      return false
+    }
   }
 
   return true
@@ -264,8 +336,13 @@ const saveSettings = async () => {
       fallbackModel: form.fallbackModel.trim(),
       modelFallbacks: form.modelFallbacks,
       secondaryApiEndpoint: form.secondaryApiEndpoint.trim(),
+      secondaryProtocol: form.secondaryProtocol,
       secondaryApiKey: sanitizeSecretWrite(form.secondaryApiKey),
       secondaryModel: form.secondaryModel.trim(),
+      tertiaryApiEndpoint: form.tertiaryApiEndpoint.trim(),
+      tertiaryProtocol: form.tertiaryProtocol,
+      tertiaryApiKey: sanitizeSecretWrite(form.tertiaryApiKey),
+      tertiaryModel: form.tertiaryModel.trim(),
       temperature: form.temperature,
       maxTokens: form.maxTokens,
       useMock: form.useMock,
@@ -277,6 +354,9 @@ const saveSettings = async () => {
     }
     if (form.secondaryApiKey) {
       form.secondaryApiKey = SECRET_MASK
+    }
+    if (form.tertiaryApiKey) {
+      form.tertiaryApiKey = SECRET_MASK
     }
   } catch {
     ElMessage.error('保存 AI 设置失败')
@@ -295,8 +375,13 @@ const resetSettings = async () => {
       fallbackModel: defaultSettings.fallbackModel,
       modelFallbacks: defaultSettings.modelFallbacks,
       secondaryApiEndpoint: defaultSettings.secondaryApiEndpoint,
+      secondaryProtocol: defaultSettings.secondaryProtocol,
       secondaryApiKey: '',
       secondaryModel: defaultSettings.secondaryModel,
+      tertiaryApiEndpoint: defaultSettings.tertiaryApiEndpoint,
+      tertiaryProtocol: defaultSettings.tertiaryProtocol,
+      tertiaryApiKey: '',
+      tertiaryModel: defaultSettings.tertiaryModel,
       temperature: defaultSettings.temperature,
       maxTokens: defaultSettings.maxTokens,
       useMock: defaultSettings.useMock,

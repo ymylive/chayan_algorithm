@@ -5,7 +5,7 @@ const {
   updateUserSettings
 } = require('../services/aiSettingsService');
 
-const DEFAULT_ALLOWED_API_HOSTS = ['openrouter.ai'];
+const DEFAULT_ALLOWED_API_HOSTS = ['openrouter.ai', 'gmn.chuangzuoli.com', 'api-inference.modelscope.cn'];
 
 const getAllowedApiHosts = () => {
   const envHosts = (process.env.AI_ALLOWED_ENDPOINT_HOSTS || '')
@@ -55,7 +55,8 @@ const getSettings = async (req, res) => {
       data: {
         ...settings,
         apiKey: settings.apiKey ? '********' : '',
-        secondaryApiKey: settings.secondaryApiKey ? '********' : ''
+        secondaryApiKey: settings.secondaryApiKey ? '********' : '',
+        tertiaryApiKey: settings.tertiaryApiKey ? '********' : ''
       }
     });
   } catch (err) {
@@ -79,8 +80,13 @@ const updateSettings = async (req, res) => {
       fallbackModel,
       modelFallbacks,
       secondaryApiEndpoint,
+      secondaryProtocol,
       secondaryApiKey,
       secondaryModel,
+      tertiaryApiEndpoint,
+      tertiaryProtocol,
+      tertiaryApiKey,
+      tertiaryModel,
       temperature,
       maxTokens,
       useMock
@@ -103,8 +109,13 @@ const updateSettings = async (req, res) => {
       fallbackModel,
       modelFallbacks,
       secondaryApiEndpoint,
+      secondaryProtocol,
       secondaryApiKey,
       secondaryModel,
+      tertiaryApiEndpoint,
+      tertiaryProtocol,
+      tertiaryApiKey,
+      tertiaryModel,
       temperature,
       maxTokens,
       useMock

@@ -12,120 +12,114 @@ const parsePositiveInt = (value, fallback, max = 100) => {
 
 const normalizeText = (value) => String(value || '').trim().toLowerCase();
 
-const GITHUB_API_BASE = String(process.env.GITHUB_API_BASE || 'https://api.github.com').replace(/\/+$/, '');
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN || '';
-const GITHUB_SEARCH_PER_PAGE = parsePositiveInt(process.env.GITHUB_SEARCH_PER_PAGE, 10, 30);
 const MCP_FETCH_TIMEOUT_MS = parsePositiveInt(process.env.MCP_FETCH_TIMEOUT_MS, 8000, 30000);
 const MCP_COMPETITOR_FANOUT = parsePositiveInt(process.env.AI_MCP_COMPETITOR_VARIANTS, 3, 6);
 const MCP_INDUSTRY_FANOUT = parsePositiveInt(process.env.AI_MCP_INDUSTRY_VARIANTS, 2, 6);
 const MCP_RESULT_LIMIT = parsePositiveInt(process.env.AI_MCP_RESULT_LIMIT, 12, 50);
+const MCP_WEB_RESULT_LIMIT = parsePositiveInt(process.env.MCP_WEB_RESULT_LIMIT, 10, 30);
 
 const toToolResult = (structuredContent) => ({
   content: [{ type: 'text', text: JSON.stringify(structuredContent, null, 2) }],
   structuredContent
 });
 
+const decodeHtml = (value) => String(value || '')
+  .replace(/&amp;/g, '&')
+  .replace(/&lt;/g, '<')
+  .replace(/&gt;/g, '>')
+  .replace(/&quot;/g, '"')
+  .replace(/&#39;/g, "'")
+  .replace(/<[^>]+>/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim();
+
 const dedupeByName = (list = []) => {
   const seen = new Map();
   for (const item of list) {
-    const key = normalizeText(item?.name);
+    const key = normalizeText(item?.url || item?.name);
     if (!key) continue;
     const prev = seen.get(key);
     if (!prev) {
       seen.set(key, item);
       continue;
     }
-    const prevStars = Number(prev.stars || 0);
-    const nextStars = Number(item.stars || 0);
-    if (nextStars > prevStars) {
-      seen.set(key, { ...item, url: item.url || prev.url, description: item.description || prev.description });
-    } else {
-      seen.set(key, { ...prev, url: prev.url || item.url, description: prev.description || item.description });
-    }
+    seen.set(key, {
+      ...prev,
+      name: prev.name || item.name,
+      url: prev.url || item.url,
+      description: prev.description || item.description,
+      source: prev.source || item.source
+    });
   }
   return [...seen.values()];
 };
 
-const getHeaders = () => {
-  const headers = {
-    Accept: 'application/vnd.github+json',
-    'X-GitHub-Api-Version': '2022-11-28',
-    'User-Agent': 'chayan-mcp-server/1.0'
-  };
-  if (GITHUB_TOKEN) {
-    headers.Authorization = `Bearer ${GITHUB_TOKEN}`;
-  }
-  return headers;
-};
-
-const githubGet = async (pathAndQuery) => {
+const fetchWithTimeout = async (url, headers = {}) => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), MCP_FETCH_TIMEOUT_MS);
   try {
-    const response = await fetch(`${GITHUB_API_BASE}${pathAndQuery}`, {
+    const response = await fetch(url, {
       method: 'GET',
-      headers: getHeaders(),
+      headers,
       signal: controller.signal
     });
 
-    const rawText = await response.text();
-    let payload = {};
-    try {
-      payload = rawText ? JSON.parse(rawText) : {};
-    } catch {
-      payload = { raw: rawText };
-    }
-
     if (!response.ok) {
-      const err = new Error(`GitHub API HTTP ${response.status}`);
+      const err = new Error(`Web search HTTP ${response.status}`);
       err.status = response.status;
-      err.payload = payload;
       throw err;
     }
 
-    return {
-      payload,
-      rateLimitRemaining: response.headers.get('x-ratelimit-remaining'),
-      rateLimitReset: response.headers.get('x-ratelimit-reset')
-    };
+    return response;
   } finally {
     clearTimeout(timer);
   }
 };
 
-const normalizeRepo = (repo, source = 'mcp') => ({
-  name: repo?.full_name || repo?.name || '',
-  description: repo?.description || '',
-  url: repo?.html_url || '',
-  stars: Number(repo?.stargazers_count || 0),
-  updated_at: repo?.updated_at || '',
-  source
-});
+const searchBingRss = async (query) => {
+  const params = new URLSearchParams({ q: query, format: 'rss' });
+  const response = await fetchWithTimeout(`https://www.bing.com/search?${params.toString()}`, {
+    Accept: 'application/rss+xml, application/xml;q=0.9, text/xml;q=0.8',
+    'User-Agent': 'chayan-mcp-server/1.0'
+  });
+
+  const xml = await response.text();
+  const items = [];
+  const itemRegex = /<item>([\s\S]*?)<\/item>/g;
+  let match;
+  while ((match = itemRegex.exec(xml)) !== null) {
+    const block = match[1] || '';
+    const title = decodeHtml((block.match(/<title>([\s\S]*?)<\/title>/i) || [])[1] || '');
+    const link = decodeHtml((block.match(/<link>([\s\S]*?)<\/link>/i) || [])[1] || '');
+    const description = decodeHtml((block.match(/<description>([\s\S]*?)<\/description>/i) || [])[1] || '');
+    if (!title || !link) continue;
+    items.push({
+      name: title,
+      description,
+      url: link,
+      source: 'web'
+    });
+    if (items.length >= MCP_WEB_RESULT_LIMIT) break;
+  }
+  return items;
+};
 
 const runSearchFanout = async (queries = [], fanout = 1) => {
   const selected = [...new Set(queries.map((q) => String(q || '').trim()).filter(Boolean))].slice(0, fanout);
   const settled = await Promise.allSettled(
     selected.map(async (q) => {
-      const params = new URLSearchParams({
-        q,
-        sort: 'updated',
-        order: 'desc',
-        per_page: String(GITHUB_SEARCH_PER_PAGE)
-      });
-      const { payload, rateLimitRemaining, rateLimitReset } = await githubGet(`/search/repositories?${params.toString()}`);
+      const items = await searchBingRss(q);
       return {
         query: q,
-        totalCount: Number(payload?.total_count || 0),
-        incompleteResults: Boolean(payload?.incomplete_results),
-        items: Array.isArray(payload?.items) ? payload.items : [],
-        rateLimitRemaining,
-        rateLimitReset
+        totalCount: items.length,
+        incompleteResults: false,
+        items
       };
     })
   );
 
   const attempts = [];
-  const repos = [];
+  const records = [];
   let totalCount = 0;
   let incompleteResults = false;
 
@@ -133,7 +127,7 @@ const runSearchFanout = async (queries = [], fanout = 1) => {
     const q = selected[idx];
     if (entry.status === 'fulfilled') {
       const val = entry.value;
-      repos.push(...val.items);
+      records.push(...val.items);
       totalCount += Number(val.totalCount || 0);
       incompleteResults = incompleteResults || Boolean(val.incompleteResults);
       attempts.push({
@@ -141,9 +135,7 @@ const runSearchFanout = async (queries = [], fanout = 1) => {
         success: true,
         resultCount: val.items.length,
         totalCount: val.totalCount,
-        incompleteResults: val.incompleteResults,
-        rateLimitRemaining: val.rateLimitRemaining || undefined,
-        rateLimitReset: val.rateLimitReset || undefined
+        incompleteResults: val.incompleteResults
       });
     } else {
       attempts.push({
@@ -157,7 +149,7 @@ const runSearchFanout = async (queries = [], fanout = 1) => {
 
   return {
     attempts,
-    repos,
+    repos: records,
     totalCount,
     incompleteResults,
     partialFailure: attempts.some((item) => !item.success)
@@ -168,7 +160,7 @@ const buildIndustryFallback = (query, message) => ({
   query,
   results: [{ name: '示例行业', trend: 'stable', source: 'mcp_fallback' }],
   meta: {
-    source: 'mcp-local-github',
+    source: 'mcp-web-aggregate',
     partialFailure: true,
     warning: message || 'fallback'
   }
@@ -178,8 +170,8 @@ const buildCompetitorFallback = (query, message) => ({
   query,
   competitors: [{ name: '竞品A', source: 'mcp_fallback' }],
   meta: {
-    sourceCounts: { mcp: 1, github: 0 },
-    sourcesUsed: ['mcp'],
+    sourceCounts: { web: 1 },
+    sourcesUsed: ['web'],
     partialFailure: true,
     warning: message || 'fallback'
   }
@@ -209,29 +201,26 @@ server.registerTool(
       ];
 
       const fanout = await runSearchFanout(candidates, MCP_INDUSTRY_FANOUT);
-      const repos = dedupeByName(fanout.repos.map((repo) => normalizeRepo(repo, 'mcp')))
-        .sort((a, b) => Number(b.stars || 0) - Number(a.stars || 0))
+      const refs = dedupeByName(fanout.repos)
         .slice(0, MCP_RESULT_LIMIT);
 
-      if (repos.length === 0) {
+      if (refs.length === 0) {
         return toToolResult(buildIndustryFallback(q, 'no_repo_results'));
       }
 
-      const results = repos.map((repo) => ({
-        name: repo.name,
-        trend: Number(repo.stars || 0) > 50 ? 'up' : 'stable',
-        source: 'mcp',
-        stars: repo.stars,
-        url: repo.url,
-        updated_at: repo.updated_at,
-        summary: repo.description
+      const results = refs.map((item) => ({
+        name: item.name,
+        trend: 'stable',
+        source: 'web',
+        url: item.url,
+        summary: item.description
       }));
 
       return toToolResult({
         query: q,
         results,
         meta: {
-          source: 'mcp-local-github',
+          source: 'mcp-web-aggregate',
           totalCount: fanout.totalCount,
           incompleteResults: fanout.incompleteResults,
           partialFailure: fanout.partialFailure,
@@ -264,15 +253,13 @@ server.registerTool(
       ];
 
       const fanout = await runSearchFanout(candidates, MCP_COMPETITOR_FANOUT);
-      const competitors = dedupeByName(fanout.repos.map((repo) => normalizeRepo(repo, 'mcp')))
-        .sort((a, b) => Number(b.stars || 0) - Number(a.stars || 0))
+      const competitors = dedupeByName(fanout.repos)
         .slice(0, MCP_RESULT_LIMIT)
-        .map((repo) => ({
-          name: repo.name,
-          description: repo.description,
-          url: repo.url,
-          stars: repo.stars,
-          source: 'mcp'
+        .map((item) => ({
+          name: item.name,
+          description: item.description,
+          url: item.url,
+          source: 'web'
         }));
 
       if (competitors.length === 0) {
@@ -284,10 +271,9 @@ server.registerTool(
         competitors,
         meta: {
           sourceCounts: {
-            mcp: competitors.length,
-            github: 0
+            web: competitors.length
           },
-          sourcesUsed: ['mcp'],
+          sourcesUsed: ['web'],
           partialFailure: fanout.partialFailure,
           totalCount: fanout.totalCount,
           incompleteResults: fanout.incompleteResults,
@@ -318,15 +304,12 @@ server.registerTool(
         `${term} trend research in:name,description`
       ], 2);
 
-      const refs = dedupeByName(fanout.repos.map((repo) => normalizeRepo(repo, 'mcp')))
-        .sort((a, b) => Number(b.stars || 0) - Number(a.stars || 0))
+      const refs = dedupeByName(fanout.repos)
         .slice(0, 8)
-        .map((repo) => ({
-          name: repo.name,
-          url: repo.url,
-          stars: repo.stars,
-          updated_at: repo.updated_at,
-          summary: repo.description
+        .map((item) => ({
+          name: item.name,
+          url: item.url,
+          summary: item.description
         }));
 
       return toToolResult({
@@ -337,7 +320,7 @@ server.registerTool(
           : `No strong market references found for ${term}`,
         references: refs,
         meta: {
-          source: 'mcp-local-github',
+          source: 'mcp-web-aggregate',
           partialFailure: fanout.partialFailure,
           totalCount: fanout.totalCount,
           incompleteResults: fanout.incompleteResults,
@@ -351,7 +334,7 @@ server.registerTool(
         report: 'Market report fallback response',
         references: [],
         meta: {
-          source: 'mcp-local-github',
+          source: 'mcp-web-aggregate',
           partialFailure: true,
           warning: err?.message || 'market_report_failed'
         }
@@ -363,7 +346,7 @@ server.registerTool(
 server.registerTool(
   'fetch_financial_data',
   {
-    description: 'Fetch lightweight financial proxy signals from open repository activity',
+    description: 'Fetch lightweight financial proxy signals from public web references',
     inputSchema: {
       company: z.string().min(1)
     }
@@ -376,25 +359,23 @@ server.registerTool(
         `${term} financial report in:name,description`
       ], 2);
 
-      const refs = dedupeByName(fanout.repos.map((repo) => normalizeRepo(repo, 'mcp')))
+      const refs = dedupeByName(fanout.repos)
         .slice(0, 10);
 
-      const totalStars = refs.reduce((sum, item) => sum + Number(item.stars || 0), 0);
+      const totalSignals = refs.length;
       const response = {
         company: term,
         repoCount: refs.length,
         indicators: {
-          totalStars,
-          developerAttentionScore: Math.min(100, Math.round(Math.log10(totalStars + 1) * 20))
+          totalSignals,
+          developerAttentionScore: Math.min(100, totalSignals * 10)
         },
         references: refs.map((item) => ({
           name: item.name,
-          url: item.url,
-          stars: item.stars,
-          updated_at: item.updated_at
+          url: item.url
         })),
         meta: {
-          source: 'mcp-local-github',
+          source: 'mcp-web-aggregate',
           partialFailure: fanout.partialFailure,
           totalCount: fanout.totalCount,
           incompleteResults: fanout.incompleteResults,
@@ -408,12 +389,12 @@ server.registerTool(
         company: String(company || ''),
         repoCount: 0,
         indicators: {
-          totalStars: 0,
+          totalSignals: 0,
           developerAttentionScore: 0
         },
         references: [],
         meta: {
-          source: 'mcp-local-github',
+          source: 'mcp-web-aggregate',
           partialFailure: true,
           warning: err?.message || 'financial_data_failed'
         }

@@ -8,7 +8,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 function getAIConfig() {
   const baseURL = String(process.env.AI_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\/+$/, '');
   const apiKey = process.env.AI_API_KEY || '';
-  const model = process.env.AI_MODEL || 'tngtech/deepseek-r1t2-chimera:free';
+  const model = process.env.AI_MODEL || 'gpt-5.2';
   const fallbackModel = process.env.AI_FALLBACK_MODEL || model;
   const httpReferer = process.env.AI_HTTP_REFERER || '';
   const title = process.env.AI_X_TITLE || '';

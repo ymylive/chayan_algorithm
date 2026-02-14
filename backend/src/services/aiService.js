@@ -17,7 +17,6 @@ const {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const ANALYSIS_PROMPT_VERSION = 'market-intel-v2.1';
 const SETTINGS_FILE = path.join(__dirname, '../../data/ai-settings.json');
-const GITHUB_SEARCH_CACHE_TTL_SECONDS = 900;
 
 const toBoolean = (value, defaultValue = false) => {
   if (typeof value === 'boolean') return value;
@@ -37,7 +36,6 @@ const parsePositiveInt = (value, fallback, max = Number.MAX_SAFE_INTEGER) => {
   return Math.min(parsed, max);
 };
 
-const normalizeText = (value) => String(value || '').trim().toLowerCase();
 
 const RESPONSES_MCP_TOOL_DEFINITIONS = [
   {
@@ -295,11 +293,11 @@ class AIService {
 
   getAIConfig() {
     const persisted = this.readPersistedSettings();
-    const baseURL = String(process.env.AI_BASE_URL || persisted.apiEndpoint || 'https://openrouter.ai/api/v1').replace(/\/+$/, '');
+    const baseURL = String(process.env.AI_BASE_URL || persisted.apiEndpoint || 'https://gmn.chuangzuoli.com/v1').replace(/\/+$/, '');
     const apiKey = process.env.AI_API_KEY || persisted.apiKey || '';
-    const model = process.env.AI_MODEL || persisted.model || 'tngtech/deepseek-r1t2-chimera:free';
+    const model = process.env.AI_MODEL || persisted.model || 'gpt-5.2';
     const fallbackModel = process.env.AI_FALLBACK_MODEL || persisted.fallbackModel || model;
-    const protocol = normalizeProtocol(process.env.AI_PROTOCOL || persisted.protocol || 'chat_completions');
+    const protocol = normalizeProtocol(process.env.AI_PROTOCOL || persisted.protocol || 'responses');
     const modelFallbacks = uniqueNonEmpty(
       String(process.env.AI_MODEL_FALLBACKS || persisted.modelFallbacks || '')
         .split(',')
@@ -310,16 +308,8 @@ class AIService {
     const temperature = Number(process.env.AI_TEMPERATURE || persisted.temperature || 0.35);
     const maxTokens = Number(process.env.AI_MAX_TOKENS || persisted.maxTokens || 1400);
     const useMock = toBoolean(process.env.AI_USE_MOCK, toBoolean(persisted.useMock, false));
-    const githubToken = process.env.GITHUB_TOKEN || '';
-    const githubApiBase = String(process.env.GITHUB_API_BASE || 'https://api.github.com').replace(/\/+$/, '');
-    const githubPerPage = Math.min(parsePositiveInt(process.env.GITHUB_SEARCH_PER_PAGE, 10), 30);
-    const competitorMaxResults = Math.min(parsePositiveInt(process.env.AI_COMPETITOR_MAX_RESULTS, 12), 30);
-    const rawMinResults = Math.min(parsePositiveInt(process.env.AI_COMPETITOR_MIN_RESULTS, 5), 20);
-    const competitorMinResults = Math.min(rawMinResults, competitorMaxResults);
-    const augmentWithGithub = toBoolean(process.env.AI_COMPETITOR_AUGMENT_GITHUB, false);
     const aiRequestTimeoutMs = parsePositiveInt(process.env.AI_REQUEST_TIMEOUT_MS, 85000, 180000);
     const aiNarrativeTotalTimeoutMs = parsePositiveInt(process.env.AI_NARRATIVE_TOTAL_TIMEOUT_MS, 110000, 300000);
-    const githubRequestTimeoutMs = parsePositiveInt(process.env.GITHUB_REQUEST_TIMEOUT_MS, 8000, 60000);
     const mcpToolTimeoutMs = parsePositiveInt(process.env.MCP_TOOL_TIMEOUT_MS, 12000, 60000);
     const aiRetryMaxAttempts = parsePositiveInt(process.env.AI_RETRY_MAX_ATTEMPTS, 2, 4);
     const aiRetryBaseDelayMs = parsePositiveInt(process.env.AI_RETRY_BASE_DELAY_MS, 1000, 10000);
@@ -329,6 +319,17 @@ class AIService {
     ).replace(/\/+$/, '');
     const secondaryApiKey = process.env.AI_SECONDARY_API_KEY || persisted.secondaryApiKey || '';
     const secondaryModel = process.env.AI_SECONDARY_MODEL || persisted.secondaryModel || '';
+    const secondaryProtocol = normalizeProtocol(
+      process.env.AI_SECONDARY_PROTOCOL || persisted.secondaryProtocol || 'chat_completions'
+    );
+    const tertiaryBaseURL = String(
+      process.env.AI_TERTIARY_BASE_URL || persisted.tertiaryApiEndpoint || ''
+    ).replace(/\/+$/, '');
+    const tertiaryApiKey = process.env.AI_TERTIARY_API_KEY || persisted.tertiaryApiKey || '';
+    const tertiaryModel = process.env.AI_TERTIARY_MODEL || persisted.tertiaryModel || '';
+    const tertiaryProtocol = normalizeProtocol(
+      process.env.AI_TERTIARY_PROTOCOL || persisted.tertiaryProtocol || 'chat_completions'
+    );
 
     return {
       baseURL,
@@ -340,21 +341,19 @@ class AIService {
       httpReferer,
       title,
       useMock,
-      githubToken,
-      githubApiBase,
-      githubPerPage,
-      competitorMinResults,
-      competitorMaxResults,
-      augmentWithGithub,
       aiRequestTimeoutMs,
       aiNarrativeTotalTimeoutMs,
-      githubRequestTimeoutMs,
       mcpToolTimeoutMs,
       aiRetryMaxAttempts,
       aiRetryBaseDelayMs,
       secondaryBaseURL,
       secondaryApiKey,
       secondaryModel,
+      secondaryProtocol,
+      tertiaryBaseURL,
+      tertiaryApiKey,
+      tertiaryModel,
+      tertiaryProtocol,
       temperature: Number.isFinite(temperature) ? temperature : 0.35,
       maxTokens: Number.isFinite(maxTokens) && maxTokens > 0 ? maxTokens : 1400
     };
@@ -1155,10 +1154,22 @@ ${JSON.stringify(compactPayload, null, 2)}`
       if (config.secondaryBaseURL && config.secondaryApiKey && config.secondaryModel) {
         providerQueue.push({
           provider: 'secondary',
-          protocol: config.protocol,
+          protocol: config.secondaryProtocol,
           model: config.secondaryModel,
           baseURL: config.secondaryBaseURL,
           apiKey: config.secondaryApiKey,
+          httpReferer: '',
+          title: ''
+        });
+      }
+
+      if (config.tertiaryBaseURL && config.tertiaryApiKey && config.tertiaryModel) {
+        providerQueue.push({
+          provider: 'tertiary',
+          protocol: config.tertiaryProtocol,
+          model: config.tertiaryModel,
+          baseURL: config.tertiaryBaseURL,
+          apiKey: config.tertiaryApiKey,
           httpReferer: '',
           title: ''
         });
@@ -1353,10 +1364,22 @@ ${JSON.stringify(compactPayload, null, 2)}`
     if (config.secondaryBaseURL && config.secondaryApiKey && config.secondaryModel) {
       providerQueue.push({
         provider: 'secondary',
-        protocol: config.protocol,
+        protocol: config.secondaryProtocol,
         model: config.secondaryModel,
         baseURL: config.secondaryBaseURL,
         apiKey: config.secondaryApiKey,
+        httpReferer: '',
+        title: ''
+      });
+    }
+
+    if (config.tertiaryBaseURL && config.tertiaryApiKey && config.tertiaryModel) {
+      providerQueue.push({
+        provider: 'tertiary',
+        protocol: config.tertiaryProtocol,
+        model: config.tertiaryModel,
+        baseURL: config.tertiaryBaseURL,
+        apiKey: config.tertiaryApiKey,
         httpReferer: '',
         title: ''
       });
@@ -1531,217 +1554,13 @@ ${JSON.stringify(compactPayload, null, 2)}`
     }
   }
 
-  normalizeCompetitorCandidates(list, source, query) {
-    const queryLower = normalizeText(query);
-    return (list || [])
-      .map((item) => {
-        const name = String(extractDisplayLabel(item) || '').trim();
-        if (!name) return null;
-
-        const description = String(item?.description || item?.summary || item?.text || '').trim();
-        const url = String(item?.html_url || item?.url || '').trim();
-        const stars = Number.isFinite(Number(item?.stargazers_count))
-          ? Number(item.stargazers_count)
-          : Number.isFinite(Number(item?.stars))
-            ? Number(item.stars)
-            : 0;
-
-        let score = source === 'mcp' ? 2 : 0;
-        const nameLower = normalizeText(name);
-        const descLower = normalizeText(description);
-        if (queryLower && nameLower.includes(queryLower)) score += 3;
-        if (queryLower && descLower.includes(queryLower)) score += 1;
-        if (stars > 0) score += Math.min(2, Math.log10(stars + 1));
-
-        return {
-          name,
-          description,
-          url,
-          stars,
-          source,
-          score: Number(score.toFixed(4))
-        };
-      })
-      .filter(Boolean);
-  }
-
-  async searchGitHubCompetitors(query) {
-    const config = this.getAIConfig();
-    if (!query || !String(query).trim()) {
-      return { query, competitors: [], meta: { source: 'github', skipped: true } };
-    }
-
-    const cacheKey = `github_competitor:${String(query).trim().toLowerCase()}`;
-    const cached = await redis.get(cacheKey).catch(() => null);
-    if (cached) {
-      try {
-        return JSON.parse(cached);
-      } catch {
-        // ignore invalid cache
-      }
-    }
-
-    const searchParams = new URLSearchParams({
-      q: `${query} (competitor OR competition OR market) in:name,description`,
-      sort: 'updated',
-      order: 'desc',
-      per_page: String(config.githubPerPage)
-    });
-
-    const headers = {
-      Accept: 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28'
-    };
-
-    if (config.githubToken) {
-      headers.Authorization = `Bearer ${config.githubToken}`;
-    }
-
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), config.githubRequestTimeoutMs);
-    let response;
-    try {
-      response = await fetch(`${config.githubApiBase}/search/repositories?${searchParams.toString()}`, {
-        method: 'GET',
-        headers,
-        signal: controller.signal
-      });
-    } catch (err) {
-      if (err?.name === 'AbortError') {
-        const timeoutErr = new Error(`GitHub search timeout after ${config.githubRequestTimeoutMs}ms`);
-        timeoutErr.status = 504;
-        throw timeoutErr;
-      }
-      throw err;
-    } finally {
-      clearTimeout(timer);
-    }
-
-    const rawText = await response.text();
-    let data = {};
-    try {
-      data = rawText ? JSON.parse(rawText) : {};
-    } catch {
-      data = { raw: rawText };
-    }
-
-    if (!response.ok) {
-      const err = new Error(`GitHub search error: HTTP ${response.status}`);
-      err.status = response.status;
-      err.payload = data;
-      throw err;
-    }
-
-    const items = Array.isArray(data?.items) ? data.items : [];
-    const competitors = items.map((repo) => ({
-      name: repo?.full_name || repo?.name || '',
-      description: repo?.description || '',
-      stars: Number(repo?.stargazers_count || 0),
-      url: repo?.html_url || '',
-      source: 'github'
-    })).filter((item) => item.name);
-
-    const result = {
-      query,
-      competitors,
-      meta: {
-        source: 'github',
-        totalCount: Number(data?.total_count || 0)
-      }
-    };
-
-    await redis.setex(cacheKey, GITHUB_SEARCH_CACHE_TTL_SECONDS, JSON.stringify(result)).catch(() => {});
-    return result;
-  }
-
-  mergeCompetitorSources(query, mcpResult, githubResult) {
-    const config = this.getAIConfig();
-    const mcpList = normalizeList(mcpResult);
-    const githubList = normalizeList(githubResult);
-
-    const mergedCandidates = [
-      ...this.normalizeCompetitorCandidates(mcpList, 'mcp', query),
-      ...this.normalizeCompetitorCandidates(githubList, 'github', query)
-    ];
-
-    const byName = new Map();
-    for (const item of mergedCandidates) {
-      const key = normalizeText(item.name);
-      if (!key) continue;
-      const prev = byName.get(key);
-      if (!prev || item.score > prev.score) {
-        const merged = prev ? {
-          ...item,
-          description: item.description || prev.description,
-          url: item.url || prev.url,
-          stars: Math.max(Number(item.stars || 0), Number(prev.stars || 0))
-        } : item;
-        byName.set(key, merged);
-      } else if (prev) {
-        byName.set(key, {
-          ...prev,
-          description: prev.description || item.description,
-          url: prev.url || item.url,
-          stars: Math.max(Number(prev.stars || 0), Number(item.stars || 0))
-        });
-      }
-    }
-
-    const competitors = [...byName.values()]
-      .sort((a, b) => b.score - a.score)
-      .slice(0, config.competitorMaxResults)
-      .map((item) => ({
-        name: item.name,
-        description: item.description,
-        url: item.url,
-        stars: item.stars,
-        source: item.source
-      }));
-
-    return {
-      query,
-      competitors,
-      meta: {
-        sourceCounts: {
-          mcp: mcpList.length,
-          github: githubList.length
-        },
-        sourcesUsed: uniqueNonEmpty(competitors.map((item) => item.source))
-      }
-    };
-  }
 
   async searchIndustryData(query) {
     return this._callMcpWithCache('search_industry', query, 'industry', (q) => this.buildMockIndustry(q));
   }
 
   async searchCompetitors(query) {
-    const config = this.getAIConfig();
-    const mcpResult = await this._callMcpWithCache('search_competitors', query, 'competitor', (q) => this.buildMockCompetitor(q));
-    const mcpCount = normalizeList(mcpResult).length;
-
-    const shouldAugment = config.augmentWithGithub || mcpCount < config.competitorMinResults;
-    if (!shouldAugment) {
-      return mcpResult;
-    }
-
-    try {
-      const githubResult = await this.searchGitHubCompetitors(query);
-      return this.mergeCompetitorSources(query, mcpResult, githubResult);
-    } catch (err) {
-      logger.warn('GitHub competitor augmentation failed:', err?.message || err);
-      return {
-        ...mcpResult,
-        meta: {
-          sourceCounts: {
-            mcp: mcpCount,
-            github: 0
-          },
-          sourcesUsed: ['mcp'],
-          partialFailure: true
-        }
-      };
-    }
+    return this._callMcpWithCache('search_competitors', query, 'competitor', (q) => this.buildMockCompetitor(q));
   }
 
   async fetchMarketReport(params) {

@@ -58,7 +58,7 @@ describe('mcpController.aiAnalyze', () => {
     jest.doMock('../src/utils/math', () => mockMath);
   });
 
-  test('returns githubData filtered from competitor sources', async () => {
+  test('returns competitor data without githubData projection field', async () => {
     const { aiAnalyze } = require('../src/controllers/mcpController');
 
     mockRedis.get.mockResolvedValueOnce(null);
@@ -68,11 +68,10 @@ describe('mcpController.aiAnalyze', () => {
     mockAiService.searchIndustryData.mockResolvedValueOnce({ results: [{ name: '新能源' }] });
     mockAiService.searchCompetitors.mockResolvedValueOnce({
       competitors: [
-        { name: 'comp/a', source: 'mcp' },
-        { name: 'org/b', source: 'github' },
-        { name: 'org/c', source: 'GitHub' }
+        { name: 'comp/a', source: 'web' },
+        { name: 'org/b', source: 'web' }
       ],
-      meta: { sourceCounts: { mcp: 1, github: 2 } }
+      meta: { sourceCounts: { web: 2 } }
     });
     mockAiService.generateAnalysisNarrative.mockResolvedValueOnce({
       text: 'ok',
@@ -91,10 +90,13 @@ describe('mcpController.aiAnalyze', () => {
     expect(res.status).not.toHaveBeenCalled();
     const payload = res.json.mock.calls[0][0];
     expect(payload.success).toBe(true);
-    expect(payload.data.mcp.githubData).toEqual([
-      { name: 'org/b', source: 'github' },
-      { name: 'org/c', source: 'github' }
-    ]);
+    expect(payload.data.mcp.competitorData).toEqual(expect.objectContaining({
+      competitors: [
+        { name: 'comp/a', source: 'web' },
+        { name: 'org/b', source: 'web' }
+      ]
+    }));
+    expect(payload.data.mcp.githubData).toBeUndefined();
   });
 
   test('ignores invalid cached JSON and recalculates response', async () => {

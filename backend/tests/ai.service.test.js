@@ -25,113 +25,53 @@ describe('aiService.searchCompetitors', () => {
     return require('../src/services/aiService');
   };
 
-  beforeEach(() => {
-    delete process.env.AI_COMPETITOR_AUGMENT_GITHUB;
-    delete process.env.AI_COMPETITOR_MIN_RESULTS;
-    delete process.env.AI_COMPETITOR_MAX_RESULTS;
-  });
-
-  test('augments sparse MCP competitor results with GitHub source', async () => {
-    const aiService = loadService();
-    const mcpSpy = jest.spyOn(aiService, '_callMcpWithCache').mockResolvedValue({
-      query: '新能源',
-      competitors: [{ name: '竞争者A', source: 'mcp' }]
-    });
-    const githubSpy = jest.spyOn(aiService, 'searchGitHubCompetitors').mockResolvedValue({
-      query: '新能源',
-      competitors: [{ name: 'org/competitor-b', description: '新能源项目', stars: 42, source: 'github' }]
-    });
-
-    process.env.AI_COMPETITOR_MIN_RESULTS = '5';
-    process.env.AI_COMPETITOR_MAX_RESULTS = '12';
-
-    const result = await aiService.searchCompetitors('新能源');
-
-    expect(mcpSpy).toHaveBeenCalledTimes(1);
-    expect(githubSpy).toHaveBeenCalledTimes(1);
-    expect(Array.isArray(result.competitors)).toBe(true);
-    expect(result.competitors.map((item) => item.name)).toEqual(
-      expect.arrayContaining(['竞争者A', 'org/competitor-b'])
-    );
-    expect(result.meta.sourceCounts.mcp).toBe(1);
-    expect(result.meta.sourceCounts.github).toBe(1);
-  });
-
-  test('returns MCP data directly when enough results and no forced augmentation', async () => {
+  test('returns MCP competitor payload directly without GitHub augmentation', async () => {
     const aiService = loadService();
     const mcpPayload = {
       query: '新能源',
-      competitors: [
-        { name: 'A' }, { name: 'B' }, { name: 'C' },
-        { name: 'D' }, { name: 'E' }, { name: 'F' }
-      ]
+      competitors: [{ name: '竞争者A', source: 'mcp' }],
+      meta: { sourceCounts: { web: 1 }, sourcesUsed: ['web'] }
     };
 
     const mcpSpy = jest.spyOn(aiService, '_callMcpWithCache').mockResolvedValue(mcpPayload);
-    const githubSpy = jest.spyOn(aiService, 'searchGitHubCompetitors').mockResolvedValue({
-      query: '新能源',
-      competitors: [{ name: 'org/unused' }]
-    });
-
-    process.env.AI_COMPETITOR_MIN_RESULTS = '5';
-    process.env.AI_COMPETITOR_AUGMENT_GITHUB = 'false';
 
     const result = await aiService.searchCompetitors('新能源');
 
     expect(mcpSpy).toHaveBeenCalledTimes(1);
-    expect(githubSpy).not.toHaveBeenCalled();
     expect(result).toEqual(mcpPayload);
   });
 
-  test('keeps MCP result and marks partialFailure when GitHub augmentation fails', async () => {
-    const aiService = loadService();
-    jest.spyOn(aiService, '_callMcpWithCache').mockResolvedValue({
-      query: '新能源',
-      competitors: [{ name: '竞争者A' }]
-    });
-    jest.spyOn(aiService, 'searchGitHubCompetitors').mockRejectedValue(new Error('rate limit'));
-
-    process.env.AI_COMPETITOR_MIN_RESULTS = '5';
-
-    const result = await aiService.searchCompetitors('新能源');
-
-    expect(result.competitors).toEqual([{ name: '竞争者A' }]);
-    expect(result.meta.partialFailure).toBe(true);
-    expect(result.meta.sourceCounts).toEqual({ mcp: 1, github: 0 });
-    expect(result.meta.sourcesUsed).toEqual(['mcp']);
-  });
-
-  test('forces GitHub augmentation when AI_COMPETITOR_AUGMENT_GITHUB is true', async () => {
+  test('passes query and cache prefix to MCP cache helper', async () => {
     const aiService = loadService();
     const mcpSpy = jest.spyOn(aiService, '_callMcpWithCache').mockResolvedValue({
       query: '新能源',
-      competitors: [{ name: 'A' }, { name: 'B' }, { name: 'C' }, { name: 'D' }, { name: 'E' }, { name: 'F' }]
-    });
-    const githubSpy = jest.spyOn(aiService, 'searchGitHubCompetitors').mockResolvedValue({
-      query: '新能源',
-      competitors: [{ name: 'org/forced' }]
+      competitors: [{ name: 'A' }]
     });
 
-    process.env.AI_COMPETITOR_MIN_RESULTS = '5';
-    process.env.AI_COMPETITOR_AUGMENT_GITHUB = 'true';
+    await aiService.searchCompetitors('新能源');
+
+    expect(mcpSpy).toHaveBeenCalledTimes(1);
+    expect(mcpSpy).toHaveBeenCalledWith(
+      'search_competitors',
+      '新能源',
+      'competitor',
+      expect.any(Function)
+    );
+  });
+
+  test('returns fallback competitor mock from helper when MCP helper falls back', async () => {
+    const aiService = loadService();
+    jest.spyOn(aiService, '_callMcpWithCache').mockResolvedValue({
+      query: '新能源',
+      competitors: [{ name: '竞品A', market_share: '15%' }]
+    });
 
     const result = await aiService.searchCompetitors('新能源');
 
-    expect(mcpSpy).toHaveBeenCalledTimes(1);
-    expect(githubSpy).toHaveBeenCalledTimes(1);
-    expect(result.meta.sourceCounts).toEqual({ mcp: 6, github: 1 });
-    expect(result.meta.sourcesUsed).toEqual(expect.arrayContaining(['mcp', 'github']));
-  });
-
-  test('normalizes competitor min/max limits to avoid inconsistent config', async () => {
-    const aiService = loadService();
-    process.env.AI_COMPETITOR_MIN_RESULTS = '20';
-    process.env.AI_COMPETITOR_MAX_RESULTS = '3';
-
-    const config = aiService.getAIConfig();
-
-    expect(config.competitorMaxResults).toBe(3);
-    expect(config.competitorMinResults).toBe(3);
+    expect(result).toEqual({
+      query: '新能源',
+      competitors: [{ name: '竞品A', market_share: '15%' }]
+    });
   });
 });
 

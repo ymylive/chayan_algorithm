@@ -2,12 +2,22 @@ const fs = require('fs');
 const path = require('path');
 const pool = require('../config/database');
 const logger = require('../config/logger');
+const { normalizeProtocol } = require('./openaiResponsesAdapter');
 
 const SETTINGS_FILE = path.join(__dirname, '../../data/ai-settings.json');
 
 const DEFAULT_SETTINGS = {
-  apiEndpoint: 'https://openrouter.ai/api/v1',
-  model: 'tngtech/deepseek-r1t2-chimera:free',
+  apiEndpoint: 'https://gmn.chuangzuoli.com/v1',
+  model: 'gpt-5.2',
+  protocol: 'responses',
+  fallbackModel: 'gpt-5.2',
+  modelFallbacks: '',
+  secondaryApiEndpoint: 'https://api-inference.modelscope.cn/v1',
+  secondaryProtocol: 'chat_completions',
+  secondaryModel: 'ZhipuAI/GLM-5',
+  tertiaryApiEndpoint: 'https://openrouter.ai/api/v1',
+  tertiaryProtocol: 'chat_completions',
+  tertiaryModel: 'deepseek/deepseek-r1-0528:free',
   temperature: 0.35,
   maxTokens: 1400,
   useMock: false
@@ -59,12 +69,17 @@ const normalizeSettings = (settings) => ({
   apiEndpoint: settings.apiEndpoint || DEFAULT_SETTINGS.apiEndpoint,
   apiKey: settings.apiKey || '',
   model: settings.model || DEFAULT_SETTINGS.model,
-  protocol: settings.protocol || 'chat_completions',
+  protocol: normalizeProtocol(settings.protocol || DEFAULT_SETTINGS.protocol),
   fallbackModel: settings.fallbackModel || settings.model || DEFAULT_SETTINGS.model,
   modelFallbacks: normalizeModelFallbacks(settings.modelFallbacks),
   secondaryApiEndpoint: settings.secondaryApiEndpoint || '',
+  secondaryProtocol: normalizeProtocol(settings.secondaryProtocol || DEFAULT_SETTINGS.secondaryProtocol),
   secondaryApiKey: settings.secondaryApiKey || '',
   secondaryModel: settings.secondaryModel || '',
+  tertiaryApiEndpoint: settings.tertiaryApiEndpoint || '',
+  tertiaryProtocol: normalizeProtocol(settings.tertiaryProtocol || DEFAULT_SETTINGS.tertiaryProtocol),
+  tertiaryApiKey: settings.tertiaryApiKey || '',
+  tertiaryModel: settings.tertiaryModel || '',
   temperature: typeof settings.temperature === 'number' ? settings.temperature : DEFAULT_SETTINGS.temperature,
   maxTokens: typeof settings.maxTokens === 'number' ? settings.maxTokens : DEFAULT_SETTINGS.maxTokens,
   useMock: typeof settings.useMock === 'boolean' ? settings.useMock : DEFAULT_SETTINGS.useMock
@@ -103,8 +118,13 @@ const buildSeedSettings = () => {
     ...(process.env.AI_FALLBACK_MODEL ? { fallbackModel: process.env.AI_FALLBACK_MODEL } : {}),
     ...(process.env.AI_MODEL_FALLBACKS ? { modelFallbacks: process.env.AI_MODEL_FALLBACKS } : {}),
     ...(process.env.AI_SECONDARY_BASE_URL ? { secondaryApiEndpoint: process.env.AI_SECONDARY_BASE_URL } : {}),
+    ...(process.env.AI_SECONDARY_PROTOCOL ? { secondaryProtocol: process.env.AI_SECONDARY_PROTOCOL } : {}),
     ...(process.env.AI_SECONDARY_API_KEY ? { secondaryApiKey: process.env.AI_SECONDARY_API_KEY } : {}),
     ...(process.env.AI_SECONDARY_MODEL ? { secondaryModel: process.env.AI_SECONDARY_MODEL } : {}),
+    ...(process.env.AI_TERTIARY_BASE_URL ? { tertiaryApiEndpoint: process.env.AI_TERTIARY_BASE_URL } : {}),
+    ...(process.env.AI_TERTIARY_PROTOCOL ? { tertiaryProtocol: process.env.AI_TERTIARY_PROTOCOL } : {}),
+    ...(process.env.AI_TERTIARY_API_KEY ? { tertiaryApiKey: process.env.AI_TERTIARY_API_KEY } : {}),
+    ...(process.env.AI_TERTIARY_MODEL ? { tertiaryModel: process.env.AI_TERTIARY_MODEL } : {}),
     ...(envTemperature !== null ? { temperature: envTemperature } : {}),
     ...(envMaxTokens !== null && envMaxTokens > 0 ? { maxTokens: envMaxTokens } : {}),
     ...(process.env.AI_USE_MOCK !== undefined
@@ -161,10 +181,17 @@ const updateUserSettings = async (userId, patch) => {
     fallbackModel: patch.fallbackModel || existing.fallbackModel,
     modelFallbacks: hasModelFallbacks ? patch.modelFallbacks : existing.modelFallbacks,
     secondaryApiEndpoint: patch.secondaryApiEndpoint || existing.secondaryApiEndpoint,
+    secondaryProtocol: patch.secondaryProtocol || existing.secondaryProtocol,
     secondaryApiKey: (patch.secondaryApiKey && patch.secondaryApiKey !== '********')
       ? patch.secondaryApiKey
       : existing.secondaryApiKey,
     secondaryModel: patch.secondaryModel || existing.secondaryModel,
+    tertiaryApiEndpoint: patch.tertiaryApiEndpoint || existing.tertiaryApiEndpoint,
+    tertiaryProtocol: patch.tertiaryProtocol || existing.tertiaryProtocol,
+    tertiaryApiKey: (patch.tertiaryApiKey && patch.tertiaryApiKey !== '********')
+      ? patch.tertiaryApiKey
+      : existing.tertiaryApiKey,
+    tertiaryModel: patch.tertiaryModel || existing.tertiaryModel,
     temperature: typeof patch.temperature === 'number' ? patch.temperature : existing.temperature,
     maxTokens: typeof patch.maxTokens === 'number' ? patch.maxTokens : existing.maxTokens,
     useMock: typeof patch.useMock === 'boolean' ? patch.useMock : existing.useMock
