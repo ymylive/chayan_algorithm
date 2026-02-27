@@ -21,7 +21,7 @@ const {
 } = require('./openaiResponsesAdapter');
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const ANALYSIS_PROMPT_VERSION = 'market-intel-v2.1';
+const ANALYSIS_PROMPT_VERSION = 'market-intel-v2.2';
 const SETTINGS_FILE = path.join(__dirname, '../../data/ai-settings.json');
 const PERSISTED_SETTINGS_CACHE_TTL_MS = 1000;
 
@@ -59,7 +59,7 @@ const CLAIM_SUPPORT_MAX_UNSUPPORTED_SAMPLES = 3;
 const CLAIM_SUPPORT_MIN_CLAIM_LENGTH = 8;
 const CLAIM_SIGNAL_PATTERN = /(\d|%|同比|增长|下降|排名|市场|营收|利润|报告|数据显示|according|source|forecast|estimate)/i;
 const CLAIM_HYPOTHESIS_TAG_PATTERN = /(?:\[\s*(?:hypothesis|假设)\s*\]|【\s*假设\s*】)/i;
-const CLAIM_INFERENCE_TAG_PATTERN = /(?:\[\s*(?:inference|\u63a8\u65ad)\s*\]|【\s*\u63a8\u65ad\s*】)/i;
+const CLAIM_INFERENCE_TAG_PATTERN = /(?:\[\s*(?:inference|推断)\s*\]|【\s*推断\s*】)/i;
 const CLAIM_TEMPLATE_INSTRUCTION_PATTERN = /(?:\u8bc4\u5206\u89c4\u5219|\u53ef\u590d\u73b0|\u8f93\u51fa\u683c\u5f0f|\u81f3\u5c11\d+\s*[\u6761\u4e2a]|\u542b\u9002\u7528\u573a\u666f|\u540c\u884c\u5bf9\u6807\u53ef\u6267\u884c\u7b56\u7565|(?:^|[\-\u2022]\s*)\u7b56\u7565\s*\d+\s*[:\uff1a]|(?:^|[\-\u2022]\s*)\u9009\u9879\s*[A-Da-d\uff21-\uff24\uff41-\uff44\u2460-\u2463\d]+\s*[:\uff1a]|(?:^|[\-\u2022]\s*)(?:\u52a8\u4f5c|\u8d1f\u8d23\u4eba|\u8d44\u6e90|kpi|\u91cc\u7a0b\u7891|\u5efa\u8bae\u52a8\u4f5c)\s*[:\uff1a]|(?:^|[\-\u2022]\s*)(?:\u5f71\u54cd|\u53ef\u884c\u6027|\u6210\u672c|\u98ce\u9669)\s*\d+|(?:^|[\-\u2022]\s*)\u6e20\u9053\u6570\u636e\s*[:\uff1a]|^p[0-3]\b(?:\s*[\(\uff08].*)?$|scoring\s*rule|output\s*format|at\s+least\s+\d+|(?:^|[\-\u2022]\s*)option\s*[A-Da-d1-4]\s*:|(?:^|[\-\u2022]\s*)(?:action|owner|resource|milestone|kpi|recommended\s+action)\s*:|(?:^|[\-\u2022]\s*)(?:impact|feasibility|cost|risk)\s*\d+|(?:^|[\-\u2022]\s*)channel\s+data\s*:)/i;
 const CLAIM_PLACEHOLDER_REFERENCE_PATTERN = /`[^`]*(?:peers?|externalEvidence|marketReport|financialData|industryData|competitorData|modelResult|uploaded)[^`]*`/i;
 const CLAIM_SECTION_LINE_PATTERN = /^\s*(?:#{1,6}\s+|(?:\d+|[一二三四五六七八九十]{1,3})(?:[.)]|、)\s*)/;
@@ -100,7 +100,7 @@ const isClaimSupportStructuralNoise = (value) => {
 
   if (CLAIM_SECTION_LINE_PATTERN.test(line)) {
     const hitSectionKeyword = CLAIM_SECTION_KEYWORDS.some((keyword) => normalized.includes(keyword));
-    const hasSentencePunctuation = /[。！？!?]/.test(line);
+    const hasSentencePunctuation = /[。！？?]/.test(line);
     if (hitSectionKeyword || !hasSentencePunctuation) {
       return true;
     }
@@ -154,6 +154,16 @@ const collectEvidenceAnchors = (payload = {}) => {
   addList(payload?.peerResearch, (item) => [item?.name, item?.source, item?.summary, item?.description]);
   addList(payload?.marketReport?.references, (item) => [item?.name, item?.summary, item?.description, item?.url]);
   addList(payload?.financialData?.references, (item) => [item?.name, item?.summary, item?.description, item?.url]);
+  addList(payload?.companyIntelligence?.targetFinancial?.references, (item) => [item?.name, item?.summary, item?.description, item?.url]);
+  addList(payload?.companyIntelligence?.targetRegulatoryFilings?.references, (item) => [item?.name, item?.summary, item?.description, item?.url]);
+  addList(payload?.companyIntelligence?.consumerInsights?.references, (item) => [item?.name, item?.summary, item?.description, item?.url]);
+  addList(payload?.companyIntelligence?.peerFinancials, (item) => [item?.company]);
+  addList(
+    normalizeList(payload?.companyIntelligence?.peerFinancials).flatMap((item) => normalizeList(item?.references)),
+    (item) => [item?.name, item?.summary, item?.description, item?.url]
+  );
+  addList(payload?.companyIntelligence?.consumerInsights?.primaryAgeRanges, (item) => [item?.range]);
+  addList(payload?.companyIntelligence?.consumerInsights?.primarySegments, (item) => [item?.segment]);
 
   return anchors;
 };
@@ -213,6 +223,109 @@ const parseCompetitorCandidatesFromText = (text, maxCandidates = 8) => {
   return uniqueNonEmpty(parsedNames.map(normalizeCompetitorName))
     .filter((name) => name.length >= 2 && name.length <= 60)
     .slice(0, Math.max(1, maxCandidates));
+};
+
+const DEMOGRAPHIC_SEGMENT_SIGNALS = [
+  { segment: 'Gen Z', patterns: ['gen z', 'z generation', 'z-gen', 'zers'] },
+  { segment: 'Gen Z', patterns: ['z\u4e16\u4ee3', '\u5e74\u8f7b\u4eba', '\u9752\u5e74\u7528\u6237'] },
+  { segment: 'Millennials', patterns: ['millennial', 'gen y'] },
+  { segment: 'Millennials', patterns: ['90\u540e', '80\u540e'] },
+  { segment: 'Gen X', patterns: ['gen x'] },
+  { segment: 'Students', patterns: ['student', 'campus', 'college'] },
+  { segment: 'Students', patterns: ['\u5b66\u751f', '\u5927\u5b66\u751f', '\u9ad8\u6821', '\u6821\u56ed'] },
+  { segment: 'White collar', patterns: ['white collar', 'office worker', 'professional'] },
+  { segment: 'White collar', patterns: ['\u767d\u9886', '\u4e0a\u73ed\u65cf', '\u804c\u573a\u4eba'] },
+  { segment: 'Parents', patterns: ['parent', 'family household', 'new parents'] },
+  { segment: 'Parents', patterns: ['\u5b9d\u5988', '\u5b9d\u7238', '\u5bb6\u5ead\u7528\u6237', '\u4eb2\u5b50'] },
+  { segment: 'Urban consumers', patterns: ['urban consumer', 'tier-1 city', 'metro'] },
+  { segment: 'Urban consumers', patterns: ['\u4e00\u7ebf\u57ce\u5e02', '\u65b0\u4e00\u7ebf', '\u90fd\u5e02\u4eba\u7fa4'] },
+  { segment: 'Sinking-market consumers', patterns: ['\u4e0b\u6c89\u5e02\u573a', '\u53bf\u57df', '\u4e09\u56db\u7ebf\u57ce\u5e02'] },
+  { segment: 'New middle class', patterns: ['\u65b0\u4e2d\u4ea7', '\u4e2d\u4ea7\u4eba\u7fa4'] },
+  { segment: 'Value seekers', patterns: ['price sensitive', 'value seeker', 'budget-conscious'] },
+  { segment: 'Value seekers', patterns: ['\u6027\u4ef7\u6bd4', '\u4ef7\u683c\u654f\u611f', '\u7406\u6027\u6d88\u8d39'] },
+  { segment: 'Premium consumers', patterns: ['premium', 'affluent', 'high income'] },
+  { segment: 'Premium consumers', patterns: ['\u9ad8\u51c0\u503c', '\u9ad8\u6536\u5165', '\u54c1\u8d28\u6d88\u8d39'] },
+  { segment: 'Female consumers', patterns: ['female consumer', 'women consumer', 'women buyer'] },
+  { segment: 'Female consumers', patterns: ['\u5973\u6027\u6d88\u8d39\u8005', '\u5973\u6027\u7528\u6237'] },
+  { segment: 'Male consumers', patterns: ['male consumer', 'men consumer', 'men buyer'] },
+  { segment: 'Male consumers', patterns: ['\u7537\u6027\u6d88\u8d39\u8005', '\u7537\u6027\u7528\u6237'] }
+];
+
+const buildReferenceKey = (item = {}) => {
+  const url = String(item?.url || '').trim().toLowerCase();
+  const name = String(item?.name || item?.title || '').trim().toLowerCase();
+  return `${url}|${name}`;
+};
+
+const normalizeReferenceRecord = (item = {}) => {
+  const name = String(item?.name || item?.title || '').trim();
+  const url = String(item?.url || '').trim();
+  if (!name && !url) return null;
+  return {
+    name: name.slice(0, 180),
+    url: url.slice(0, 520),
+    summary: String(item?.summary || item?.description || '').trim().slice(0, 280),
+    source: String(item?.source || '').trim() || undefined,
+    relevanceScore: Number(item?.relevanceScore || 0),
+    authority: item?.authority || undefined,
+    reasonCodes: Array.isArray(item?.reasonCodes) ? item.reasonCodes : undefined
+  };
+};
+
+const dedupeReferenceRecords = (items = [], limit = 20) => {
+  const maxItems = parsePositiveInt(limit, 20, 100);
+  const map = new Map();
+  normalizeList(items).forEach((item) => {
+    const normalized = normalizeReferenceRecord(item);
+    if (!normalized) return;
+    const key = buildReferenceKey(normalized);
+    if (!key.trim()) return;
+    if (!map.has(key)) {
+      map.set(key, normalized);
+    }
+  });
+  return Array.from(map.values()).slice(0, maxItems);
+};
+
+const extractConsumerSignals = (references = []) => {
+  const ageRangeCounts = new Map();
+  const segmentCounts = new Map();
+  const agePattern = /(?<!\d)(1[0-9]|[2-6][0-9])\s*(?:-|~|to|\u81f3|\u5230)\s*(1[0-9]|[2-6][0-9])(?:\s*(?:years?\s*old|yo|\u5c81))?/giu;
+
+  normalizeList(references).forEach((item) => {
+    const name = String(item?.name || item?.title || '');
+    const summary = String(item?.summary || item?.description || '');
+    const rawText = `${name} ${summary}`;
+    const text = rawText.toLowerCase();
+
+    const matches = rawText.matchAll(agePattern);
+    for (const match of matches) {
+      const low = Number.parseInt(String(match?.[1] || ''), 10);
+      const high = Number.parseInt(String(match?.[2] || ''), 10);
+      if (!Number.isFinite(low) || !Number.isFinite(high)) continue;
+      if (low >= high || low < 10 || high > 70) continue;
+      if ((high - low) > 35) continue;
+      const range = `${low}-${high}`;
+      ageRangeCounts.set(range, Number(ageRangeCounts.get(range) || 0) + 1);
+    }
+
+    DEMOGRAPHIC_SEGMENT_SIGNALS.forEach((signal) => {
+      if (signal.patterns.some((pattern) => text.includes(pattern))) {
+        segmentCounts.set(signal.segment, Number(segmentCounts.get(signal.segment) || 0) + 1);
+      }
+    });
+  });
+
+  return {
+    primaryAgeRanges: Array.from(ageRangeCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([range, count]) => ({ range, count })),
+    primarySegments: Array.from(segmentCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([segment, count]) => ({ segment, count }))
+  };
 };
 
 const buildClaimSupportMetrics = (text, payload) => {
@@ -536,31 +649,27 @@ const stableJsonStringify = (value) => {
   }
 };
 
-const ANALYSIS_SYSTEM_PROMPT = `# 角色：AI市场分析专家（Market Intelligence & Strategy Analyst）
-你是咨询顾问合伙人级别的市场分析专家。基于输入数据完成：多维市场分析 + 竞品对标 + 可执行增长建议。
+const ANALYSIS_SYSTEM_PROMPT = `# 角色
+你是 Market Intelligence & Strategy Analyst。你需要基于输入数据输出专业、结构化、可执行的商业分析。
 
-## 必须遵守
-1. 证据优先：关键结论必须绑定数据、字段或模型结果，并标注【事实】【推断】【假设】。
-2. 可复现：定量结论要说明口径、方法、关键输入。
-3. 不臆造数据：无数据时明确缺口与影响，允许给区间假设并写明来源逻辑。
-4. 面向落地：建议必须含动作、负责人部门、资源、里程碑、KPI、风险与对策。
-5. 多维覆盖：至少覆盖市场/客户/产品/渠道/竞争/增长/财务/风险/组织中的6个维度。
+## 硬性规则
+1. 仅使用输入 JSON 的证据字段，不得编造数据、结论或来源。
+2. 每条关键结论必须标注 claim_type: 事实|推断|假设，并绑定 evidence_ids。
+3. 所有量化结论必须附 evidence_ids；证据不足时必须写入 data_gaps，不能给确定性断言。
+4. 输出需覆盖：市场、客户、产品、渠道、竞争、增长、财务、风险。
+5. 模型解读必须包含 Entropy Weight + TOPSIS + Theil-Sen 的方法含义、驱动因素、边界和风险。
 
-## 与当前项目结构对齐（重要）
-- 你不能直接调用工具；你只可使用输入中的结构化数据（上传数据摘要、MCP检索摘要、模型输出、同行对标结果）。
-- 数学模型为：Entropy Weight + TOPSIS + Theil-Sen，需在解读中体现其含义与限制。
-- 如外部信息不足，输出“待补齐清单”，不要虚构市场规模或份额。
+## 输出结构
+请按以下结构输出（Markdown），并在关键项附 evidence_ids：
+1) 高管摘要（<=3条）
+2) 关键洞察（分模块，至少6个维度）
+3) 模型结果解读
+4) 竞品与同行对标（对象/优势/短板/建议动作）
+5) 战略选项（2-4项，含影响/可行性/成本/风险评分）
+6) 30/60/90天行动路线图
+7) 数据缺口与补齐计划（P0/P1/P2）
 
-## 输出格式（严格按顺序）
-1) 高管摘要（3条以内，每条1句话）
-2) 关键洞察（分模块，至少6个维度；每条前缀【事实/推断/假设】）
-3) 模型结果解读（方法、驱动因素、风险、适用边界）
-4) 竞品与同行对标（矩阵式描述：对象/优势/短板/建议动作）
-5) 战略选项（2~4项，按“影响×可行性×成本×风险”评分）
-6) 30/60/90天行动路线图（动作、负责人、资源、KPI、里程碑）
-7) 数据缺口与补齐计划（优先级P0/P1/P2）
-
-语言：中文、专业、简洁，禁止空话。`;
+语言要求：中文、专业、简洁、可落地。`;
 
 class AIService {
   constructor() {
@@ -819,15 +928,15 @@ class AIService {
   }
 
   buildMockIndustry(query) {
-    return { query, results: [{ name: '示例行业', trend: '上升', data: [] }] };
+    return { query, results: [{ name: 'Sample Industry', trend: 'up', data: [] }] };
   }
 
   buildMockCompetitor(query) {
-    return { query, competitors: [{ name: '竞品A', market_share: '15%' }] };
+    return { query, competitors: [{ name: 'Competitor A', market_share: '15%' }] };
   }
 
   buildMockMarketReport() {
-    return { report: '市场报告示例', date: new Date().toISOString() };
+    return { report: 'Sample market report', date: new Date().toISOString() };
   }
 
   buildMockFinancialData(params) {
@@ -966,26 +1075,30 @@ class AIService {
   }
 
   buildNarrativeFallback(input) {
-    const target = input?.target || '当前对象';
+    const target = input?.target || 'current target';
     const peers = (input?.peers || [])
       .slice(0, 3)
-      .map((item) => `${item.name}(分数${item.topsisScore ?? '-'})`)
-      .join('、');
+      .map((item) => `${item.name}(score ${item.topsisScore ?? '-'})`)
+      .join(', ');
     const trend = input?.model?.trendLabel || 'stable';
     const trendSlope = input?.model?.trendSlope ?? 0;
     const topIndustries = (input?.uploaded?.topIndustries || [])
       .slice(0, 3)
       .map((item) => `${item.name}(${item.count})`)
-      .join('、');
+      .join(', ');
 
-    const trendText = trend === 'up' ? '上升' : trend === 'down' ? '下降' : '稳定';
+    const trendText = trend === 'up' ? 'upward' : trend === 'down' ? 'downward' : 'stable';
 
     return [
-      `基于上传数据、MCP 检索与数学模型，对“${target}”完成综合评估。`,
-      topIndustries ? `当前样本主要集中在：${topIndustries}。` : '当前样本行业标签偏少，需继续补充结构化数据。',
-      `TOPSIS-TheilSen 趋势为${trendText}（斜率 ${trendSlope}）。`,
-      peers ? `同行对标建议优先关注：${peers}。` : '同行样本仍不足，建议补充更完整竞品清单。',
-      '建议以“市场需求、价格变化、竞品动作、渠道效率”四维建立月度跟踪看板并持续校准模型权重。'
+      `Generated fallback narrative for "${target}" based on uploaded rows, MCP evidence, and model output.`,
+      topIndustries
+        ? `Top industries in uploaded samples: ${topIndustries}.`
+        : 'Industry labels in uploaded samples are limited; enrich structured enterprise data for stronger explainability.',
+      `TOPSIS-TheilSen trend is ${trendText} (slope ${trendSlope}).`,
+      peers
+        ? `Peer benchmark focus: ${peers}.`
+        : 'Peer sample coverage is limited; add a broader competitor list for stronger benchmarking.',
+      'Recommended tracking dimensions: demand, pricing, competitor moves, and channel efficiency.'
     ].join('\n');
   }
 
@@ -1896,7 +2009,51 @@ class AIService {
             name: String(item?.name || '').trim().slice(0, 120),
             url: String(item?.url || '').trim().slice(0, 220)
           })),
-        financialIndicators: payload?.financialData?.indicators || {}
+        financialIndicators: payload?.financialData?.indicators || {},
+        targetFinancialReferences: dedupeReferenceRecords([
+          ...normalizeList(payload?.companyIntelligence?.targetFinancial?.references),
+          ...normalizeList(payload?.companyIntelligence?.targetRegulatoryFilings?.references)
+        ], Math.min(limits.mcpSignals, 6)).map((item) => ({
+          name: String(item?.name || '').trim().slice(0, 120),
+          url: String(item?.url || '').trim().slice(0, 220)
+        })),
+        peerFinancialReferences: dedupeReferenceRecords(
+          normalizeList(payload?.companyIntelligence?.peerFinancials)
+            .flatMap((item) => normalizeList(item?.references)),
+          Math.min(limits.mcpSignals, 6)
+        ).map((item) => ({
+          name: String(item?.name || '').trim().slice(0, 120),
+          url: String(item?.url || '').trim().slice(0, 220)
+        })),
+        consumerReferences: dedupeReferenceRecords(
+          normalizeList(payload?.companyIntelligence?.consumerInsights?.references),
+          Math.min(limits.mcpSignals, 6)
+        ).map((item) => ({
+          name: String(item?.name || '').trim().slice(0, 120),
+          url: String(item?.url || '').trim().slice(0, 220),
+          summary: String(item?.summary || '').trim().slice(0, 180)
+        })),
+        consumerProfile: {
+          primaryAgeRanges: normalizeList(payload?.companyIntelligence?.consumerInsights?.primaryAgeRanges)
+            .slice(0, 5),
+          primarySegments: normalizeList(payload?.companyIntelligence?.consumerInsights?.primarySegments)
+            .slice(0, 6)
+        }
+      },
+      companyIntelligence: {
+        target: payload?.companyIntelligence?.target || payload?.target,
+        competitorNames: normalizeList(payload?.companyIntelligence?.competitorNames).slice(0, 8),
+        peerFinancials: normalizeList(payload?.companyIntelligence?.peerFinancials)
+          .slice(0, 5)
+          .map((item) => ({
+            company: String(item?.company || '').trim().slice(0, 120),
+            referenceCount: Number(item?.referenceCount || 0),
+            partialFailure: Boolean(item?.partialFailure)
+          })),
+        consumerInsights: {
+          primaryAgeRanges: normalizeList(payload?.companyIntelligence?.consumerInsights?.primaryAgeRanges).slice(0, 5),
+          primarySegments: normalizeList(payload?.companyIntelligence?.consumerInsights?.primarySegments).slice(0, 6)
+        }
       },
       mcpCoverage: payload?.mcpCoverage || {},
       keyFindings: (payload?.keyFindings || []).slice(0, limits.keyFindings)
@@ -1909,17 +2066,28 @@ class AIService {
       },
       {
         role: 'user',
-        content: `请基于以下项目数据，输出完整分析报告。
-
-补充要求：
-- 关键结论必须可追溯到输入数据字段或模型结果。
-- 对“同行对标”给出至少3条可执行策略，并写明适用场景。
-- 对任何不确定项明确为“假设”并说明影响范围。
-- 若 mcpCoverage 显示信号不足，必须先补充外部证据后再下结论。
-- 尽量给出可追溯外部参考来源；若仍不足需明确数据缺口与下一步检索方向。
-
-输入数据(JSON)：
-${JSON.stringify(compactPayload, null, 2)}`
+        content: `请基于以下项目数据输出结构化分析。
+输出要求（必须遵守）：
+1) 严格区分【事实/推断/假设】。
+2) 关键结论必须附 evidence_ids。
+3) 量化结论无证据时必须写入 data_gaps。
+4) 必须包含 company_financial_statement_analysis、peer_financial_benchmark、consumer_demographics、actions_30_60_90。
+5) 对数据不足场景明确缺口和下一步检索查询。
+输出建议 JSON 结构：
+{
+  executive_summary: [{ claim, claim_type, confidence, evidence_ids }],
+  key_insights: [{ dimension, claim, claim_type, evidence_ids }],
+  company_financial_statement_analysis: [{ metric, period, finding, evidence_ids }],
+  peer_financial_benchmark: [{ peer, finding, evidence_ids }],
+  consumer_demographics: {
+    age_ranges: [{ range, evidence_ids }],
+    segments: [{ segment, evidence_ids }]
+  },
+  strategy_options: [{ option, impact, feasibility, cost, risk, rationale, evidence_ids }],
+  actions_30_60_90: [{ horizon, action, owner, kpi, evidence_ids }],
+  data_gaps: [{ gap_type, missing_fields, next_queries }]
+}
+输入数据(JSON)：${JSON.stringify(compactPayload, null, 2)}`
       }
     ];
   }
@@ -1940,6 +2108,29 @@ ${JSON.stringify(compactPayload, null, 2)}`
       financialData: {
         ...(payload?.financialData || {}),
         references: normalizeList(payload?.financialData?.references || []).slice(0, 3)
+      },
+      companyIntelligence: {
+        ...(payload?.companyIntelligence || {}),
+        targetFinancial: {
+          ...(payload?.companyIntelligence?.targetFinancial || {}),
+          references: normalizeList(payload?.companyIntelligence?.targetFinancial?.references || []).slice(0, 3)
+        },
+        targetRegulatoryFilings: {
+          ...(payload?.companyIntelligence?.targetRegulatoryFilings || {}),
+          references: normalizeList(payload?.companyIntelligence?.targetRegulatoryFilings?.references || []).slice(0, 3)
+        },
+        peerFinancials: normalizeList(payload?.companyIntelligence?.peerFinancials || [])
+          .slice(0, 3)
+          .map((item) => ({
+            ...item,
+            references: normalizeList(item?.references || []).slice(0, 3)
+          })),
+        consumerInsights: {
+          ...(payload?.companyIntelligence?.consumerInsights || {}),
+          references: normalizeList(payload?.companyIntelligence?.consumerInsights?.references || []).slice(0, 3),
+          primaryAgeRanges: normalizeList(payload?.companyIntelligence?.consumerInsights?.primaryAgeRanges || []).slice(0, 4),
+          primarySegments: normalizeList(payload?.companyIntelligence?.consumerInsights?.primarySegments || []).slice(0, 4)
+        }
       }
     };
   }
@@ -1949,7 +2140,7 @@ ${JSON.stringify(compactPayload, null, 2)}`
       .slice(0, CLAIM_SUPPORT_MAX_UNSUPPORTED_SAMPLES)
       .map((item, index) => `${index + 1}. ${String(item || '').trim().slice(0, 180)}`)
       .join('\n');
-    const sampleBlock = samples ? `\n待修复断言样例：\n${samples}` : '';
+    const sampleBlock = samples ? `\n寰呬慨澶嶆柇瑷€鏍蜂緥锛歕n${samples}` : '';
 
     return [
       ...this.buildNarrativeMessages(payload),
@@ -1959,7 +2150,7 @@ ${JSON.stringify(compactPayload, null, 2)}`
       },
       {
         role: 'user',
-        content: `请修订上一版分析文本，只保留可由输入数据字段或外部参考直接支撑的结论。\n要求：\n- 删除或改写无法在输入证据中找到锚点的断言；\n- 对不确定内容用“假设”标记；\n- 不要新增输入中不存在的数据或来源；\n- 输出仍保持完整分析结构。${sampleBlock}`
+        content: `璇蜂慨璁笂涓€鐗堝垎鏋愭枃鏈紝鍙繚鐣欏彲鐢辫緭鍏ユ暟鎹瓧娈垫垨澶栭儴鍙傝€冪洿鎺ユ敮鎾戠殑缁撹銆俓n瑕佹眰锛歕n- 鍒犻櫎鎴栨敼鍐欐棤娉曞湪杈撳叆璇佹嵁涓壘鍒伴敋鐐圭殑鏂█锛沑n- 瀵逛笉纭畾鍐呭鐢ㄢ€滃亣璁锯€濇爣璁帮紱\n- 涓嶈鏂板杈撳叆涓笉瀛樺湪鐨勬暟鎹垨鏉ユ簮锛沑n- 杈撳嚭浠嶄繚鎸佸畬鏁村垎鏋愮粨鏋勩€?{sampleBlock}`
       }
     ];
   }
@@ -3011,6 +3202,335 @@ ${JSON.stringify(compactPayload, null, 2)}`
 
   async fetchNewsStream(params) {
     return this._callMcpWithCache('fetch_news_stream', params, 'news', (p) => this.buildMockNewsStream(p));
+  }
+
+  async fetchCompanyIntelligence(params = {}) {
+    const target = String(params?.target || params?.company || '').trim().slice(0, 200);
+    const timeframe = String(params?.timeframe || 'latest').trim().slice(0, 80) || 'latest';
+    const competitorLimit = parsePositiveInt(params?.competitorLimit, 4, 8);
+    const seed = params?.seed && typeof params.seed === 'object' ? params.seed : {};
+    const settleOne = async (promise) => {
+      try {
+        return { status: 'fulfilled', value: await promise };
+      } catch (reason) {
+        return { status: 'rejected', reason };
+      }
+    };
+
+    if (!target) {
+      return {
+        target: '',
+        timeframe,
+        competitorNames: [],
+        targetFinancial: { company: '', repoCount: 0, references: [] },
+        targetRegulatoryFilings: { company: '', filingCount: 0, references: [] },
+        peerFinancials: [],
+        consumerInsights: {
+          query: '',
+          references: [],
+          primaryAgeRanges: [],
+          primarySegments: []
+        },
+        meta: {
+          partialFailure: true,
+          failureReasons: ['target_required'],
+          competitorCount: 0,
+          peerCoverageCount: 0
+        }
+      };
+    }
+
+    const normalizedTargetKey = normalizeCompetitorName(target).toLowerCase();
+    let competitorNames = uniqueNonEmpty(
+      normalizeList(params?.competitors).map((item) => extractDisplayLabel(item))
+    )
+      .map((name) => normalizeCompetitorName(name))
+      .filter((name) => name && name.toLowerCase() !== normalizedTargetKey)
+      .slice(0, competitorLimit);
+
+    if (competitorNames.length === 0) {
+      const seedCompetitors = normalizeList(seed?.competitorData?.competitors);
+      if (seedCompetitors.length > 0) {
+        competitorNames = uniqueNonEmpty(seedCompetitors.map((item) => extractDisplayLabel(item)))
+          .map((name) => normalizeCompetitorName(name))
+          .filter((name) => name && name.toLowerCase() !== normalizedTargetKey)
+          .slice(0, competitorLimit);
+      }
+    }
+
+    if (competitorNames.length === 0) {
+      const competitorResult = await settleOne(this.searchCompetitors(`${target} competitor benchmark`));
+      if (competitorResult.status === 'fulfilled') {
+        competitorNames = uniqueNonEmpty(
+          normalizeList(competitorResult.value?.competitors).map((item) => extractDisplayLabel(item))
+        )
+          .map((name) => normalizeCompetitorName(name))
+          .filter((name) => name && name.toLowerCase() !== normalizedTargetKey)
+          .slice(0, competitorLimit);
+      }
+    }
+
+    const consumerMarketQuery = `${target} 用户画像 年龄 性别 城市 消费分层`;
+    const consumerNewsQuery = `${target} 消费者调研 主要消费人群 年龄段`;
+    const targetFinancialNewsQuery = `${target} 财报 年报 营收 净利润 投资者关系`;
+    const peerFinancialNewsQuery = (companyName) => (
+      `${companyName} 财报 年报 营收 净利润 investor relations`
+    );
+
+    const targetFinancialTask = seed?.financialData
+      ? Promise.resolve(seed.financialData)
+      : this.fetchFinancialData({ company: target });
+    const targetRegulatoryTask = seed?.regulatoryFilings
+      ? Promise.resolve(seed.regulatoryFilings)
+      : this.fetchRegulatoryFilings({ company: target, timeframe });
+    const consumerMarketTask = seed?.marketReport
+      ? Promise.resolve(seed.marketReport)
+      : this.fetchMarketReport({ query: consumerMarketQuery, timeframe });
+    const consumerNewsTask = seed?.newsStream
+      ? Promise.resolve(seed.newsStream)
+      : this.fetchNewsStream({ query: consumerNewsQuery, timeframe, limit: 12 });
+    const targetFinancialNewsTask = this.fetchNewsStream({ query: targetFinancialNewsQuery, timeframe, limit: 12 });
+
+    const peerFinancialTasks = competitorNames.map(async (companyName) => {
+      const [financialSettled, filingsSettled, peerNewsSettled] = await Promise.all([
+        settleOne(this.fetchFinancialData({ company: companyName })),
+        settleOne(this.fetchRegulatoryFilings({ company: companyName, timeframe })),
+        settleOne(this.fetchNewsStream({
+          query: peerFinancialNewsQuery(companyName),
+          timeframe,
+          limit: 8
+        }))
+      ]);
+
+      const financialPayload = financialSettled.status === 'fulfilled'
+        ? financialSettled.value
+        : this.buildMcpFallbackPayload('fetch_financial_data', { company: companyName }, 'peer_financial_failed');
+      const filingPayload = filingsSettled.status === 'fulfilled'
+        ? filingsSettled.value
+        : this.buildMcpFallbackPayload('fetch_regulatory_filings', { company: companyName, timeframe }, 'peer_filings_failed');
+      const peerNewsPayload = peerNewsSettled.status === 'fulfilled'
+        ? peerNewsSettled.value
+        : this.buildMcpFallbackPayload('fetch_news_stream', { query: peerFinancialNewsQuery(companyName), timeframe, limit: 8 }, 'peer_financial_news_failed');
+
+      const references = dedupeReferenceRecords([
+        ...normalizeList(financialPayload?.references),
+        ...normalizeList(filingPayload?.references || filingPayload?.filings),
+        ...normalizeList(peerNewsPayload?.references || peerNewsPayload?.news)
+      ], 10);
+
+      return {
+        company: companyName,
+        referenceCount: references.length,
+        references,
+        financialData: {
+          repoCount: Number(
+            financialPayload?.repoCount
+            || normalizeList(financialPayload?.references).length
+            || normalizeList(peerNewsPayload?.references || peerNewsPayload?.news).length
+            || 0
+          ),
+          references: dedupeReferenceRecords([
+            ...normalizeList(financialPayload?.references),
+            ...normalizeList(peerNewsPayload?.references || peerNewsPayload?.news)
+          ], 8)
+        },
+        regulatoryFilings: {
+          filingCount: Number(
+            filingPayload?.filingCount
+            || filingPayload?.fillingCount
+            || normalizeList(filingPayload?.references || filingPayload?.filings).length
+            || 0
+          ),
+          references: dedupeReferenceRecords(filingPayload?.references || filingPayload?.filings, 8)
+        },
+        partialFailure: Boolean(
+          financialSettled.status !== 'fulfilled'
+          || filingsSettled.status !== 'fulfilled'
+          || peerNewsSettled.status !== 'fulfilled'
+          || financialPayload?.meta?.partialFailure
+          || filingPayload?.meta?.partialFailure
+          || peerNewsPayload?.meta?.partialFailure
+        )
+      };
+    });
+
+    const [
+      targetFinancialSettled,
+      targetRegulatorySettled,
+      consumerMarketSettled,
+      consumerNewsSettled,
+      targetFinancialNewsSettled,
+      peerSettled
+    ] = await Promise.all([
+      settleOne(targetFinancialTask),
+      settleOne(targetRegulatoryTask),
+      settleOne(consumerMarketTask),
+      settleOne(consumerNewsTask),
+      settleOne(targetFinancialNewsTask),
+      Promise.allSettled(peerFinancialTasks)
+    ]);
+
+    const failureReasons = [];
+    if (targetFinancialSettled.status !== 'fulfilled') failureReasons.push('target_financial_failed');
+    if (targetRegulatorySettled.status !== 'fulfilled') failureReasons.push('target_filings_failed');
+    if (consumerMarketSettled.status !== 'fulfilled') failureReasons.push('consumer_market_failed');
+    if (consumerNewsSettled.status !== 'fulfilled') failureReasons.push('consumer_news_failed');
+    if (targetFinancialNewsSettled.status !== 'fulfilled') failureReasons.push('target_financial_news_failed');
+
+    const targetFinancialPayload = targetFinancialSettled.status === 'fulfilled'
+      ? targetFinancialSettled.value
+      : this.buildMcpFallbackPayload('fetch_financial_data', { company: target }, 'target_financial_failed');
+    const targetFilingsPayload = targetRegulatorySettled.status === 'fulfilled'
+      ? targetRegulatorySettled.value
+      : this.buildMcpFallbackPayload('fetch_regulatory_filings', { company: target, timeframe }, 'target_filings_failed');
+    const consumerMarketPayload = consumerMarketSettled.status === 'fulfilled'
+      ? consumerMarketSettled.value
+      : this.buildMcpFallbackPayload('fetch_market_report', { query: target, timeframe }, 'consumer_market_failed');
+    const consumerNewsPayload = consumerNewsSettled.status === 'fulfilled'
+      ? consumerNewsSettled.value
+      : this.buildMcpFallbackPayload('fetch_news_stream', { query: target, timeframe }, 'consumer_news_failed');
+    const targetFinancialNewsPayload = targetFinancialNewsSettled.status === 'fulfilled'
+      ? targetFinancialNewsSettled.value
+      : this.buildMcpFallbackPayload('fetch_news_stream', { query: targetFinancialNewsQuery, timeframe, limit: 12 }, 'target_financial_news_failed');
+
+    let peerFinancials = peerSettled
+      .filter((entry) => {
+        if (entry.status === 'fulfilled') return true;
+        failureReasons.push('peer_financial_task_failed');
+        return false;
+      })
+      .map((entry) => entry.value);
+
+    let consumerReferences = dedupeReferenceRecords([
+      ...normalizeList(consumerMarketPayload?.references),
+      ...normalizeList(consumerNewsPayload?.references || consumerNewsPayload?.news)
+    ], 16);
+    let consumerSignals = extractConsumerSignals(consumerReferences);
+
+    const peerCoverageThreshold = Math.min(Math.max(1, competitorNames.length), 2);
+    const initialPeerCoverageCount = peerFinancials
+      .filter((item) => Number(item?.referenceCount || 0) > 0)
+      .length;
+    const needsPeerSupplement = initialPeerCoverageCount < peerCoverageThreshold;
+    const needsConsumerSupplement = (
+      consumerReferences.length < 3
+      || consumerSignals.primaryAgeRanges.length === 0
+      || consumerSignals.primarySegments.length === 0
+    );
+
+    if (needsPeerSupplement || needsConsumerSupplement) {
+      const supplementalTasks = [];
+      if (needsConsumerSupplement) {
+        supplementalTasks.push({
+          kind: 'consumer_market',
+          promise: this.fetchMarketReport({ query: `${target} 用户画像 主要消费群体 年龄段`, timeframe })
+        });
+        supplementalTasks.push({
+          kind: 'consumer_news',
+          promise: this.fetchNewsStream({ query: `${target} 消费者 年龄段 用户画像 调查`, timeframe, limit: 12 })
+        });
+      }
+
+      if (needsPeerSupplement) {
+        peerFinancials
+          .filter((item) => Number(item?.referenceCount || 0) === 0)
+          .slice(0, 2)
+          .forEach((item) => {
+            const companyName = String(item?.company || '').trim();
+            if (!companyName) return;
+            supplementalTasks.push({
+              kind: 'peer_news',
+              company: companyName,
+              promise: this.fetchNewsStream({ query: peerFinancialNewsQuery(companyName), timeframe, limit: 8 })
+            });
+          });
+      }
+
+      if (supplementalTasks.length > 0) {
+        const supplementalSettled = await Promise.allSettled(supplementalTasks.map((task) => task.promise));
+        supplementalSettled.forEach((entry, index) => {
+          const task = supplementalTasks[index];
+          if (entry.status !== 'fulfilled' || !entry.value) {
+            failureReasons.push(`supplemental_${task.kind}_failed`);
+            return;
+          }
+          const payload = entry.value;
+          if (task.kind === 'consumer_market' || task.kind === 'consumer_news') {
+            consumerReferences = dedupeReferenceRecords([
+              ...consumerReferences,
+              ...normalizeList(payload?.references || payload?.news)
+            ], 20);
+            return;
+          }
+          const peerRefs = dedupeReferenceRecords(payload?.references || payload?.news, 8);
+          if (peerRefs.length === 0) return;
+          peerFinancials = peerFinancials.map((peer) => {
+            if (String(peer?.company || '').trim().toLowerCase() !== String(task.company || '').trim().toLowerCase()) {
+              return peer;
+            }
+            const mergedRefs = dedupeReferenceRecords([
+              ...normalizeList(peer?.references),
+              ...peerRefs
+            ], 12);
+            return {
+              ...peer,
+              references: mergedRefs,
+              referenceCount: mergedRefs.length
+            };
+          });
+        });
+        consumerSignals = extractConsumerSignals(consumerReferences);
+      }
+    }
+
+    const targetFinancialReferences = dedupeReferenceRecords([
+      ...normalizeList(targetFinancialPayload?.references),
+      ...normalizeList(targetFinancialNewsPayload?.references || targetFinancialNewsPayload?.news)
+    ], 12);
+    const targetFilingReferences = dedupeReferenceRecords(
+      targetFilingsPayload?.references || targetFilingsPayload?.filings,
+      10
+    );
+
+    const peerCoverageCount = peerFinancials
+      .filter((item) => Number(item?.referenceCount || 0) > 0)
+      .length;
+    const hasPartialFailure = failureReasons.length > 0
+      || Boolean(targetFinancialPayload?.meta?.partialFailure)
+      || Boolean(targetFilingsPayload?.meta?.partialFailure)
+      || Boolean(consumerMarketPayload?.meta?.partialFailure)
+      || Boolean(consumerNewsPayload?.meta?.partialFailure)
+      || Boolean(targetFinancialNewsPayload?.meta?.partialFailure)
+      || peerFinancials.some((item) => Boolean(item?.partialFailure));
+
+    return {
+      target,
+      timeframe,
+      competitorNames,
+      targetFinancial: {
+        company: target,
+        repoCount: Math.max(Number(targetFinancialPayload?.repoCount || 0), targetFinancialReferences.length),
+        references: targetFinancialReferences
+      },
+      targetRegulatoryFilings: {
+        company: target,
+        filingCount: Number(targetFilingsPayload?.filingCount || targetFilingsPayload?.fillingCount || targetFilingReferences.length || 0),
+        references: targetFilingReferences
+      },
+      peerFinancials,
+      consumerInsights: {
+        query: consumerMarketQuery,
+        references: consumerReferences,
+        primaryAgeRanges: consumerSignals.primaryAgeRanges,
+        primarySegments: consumerSignals.primarySegments
+      },
+      meta: {
+        partialFailure: hasPartialFailure,
+        failureReasons: uniqueNonEmpty(failureReasons),
+        competitorCount: competitorNames.length,
+        peerCoverageCount
+      }
+    };
   }
 
   async analyzeData() {

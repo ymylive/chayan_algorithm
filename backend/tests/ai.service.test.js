@@ -168,6 +168,96 @@ describe('aiService.searchCompetitors', () => {
   });
 });
 
+describe('aiService.fetchCompanyIntelligence', () => {
+  const loadService = () => {
+    jest.resetModules();
+
+    jest.doMock('../src/config/redis', () => ({
+      get: jest.fn().mockResolvedValue(null),
+      setex: jest.fn().mockResolvedValue('OK'),
+      del: jest.fn().mockResolvedValue(1)
+    }));
+
+    jest.doMock('../src/config/logger', () => ({
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn()
+    }));
+
+    jest.doMock('@modelcontextprotocol/sdk/client/index.js', () => ({
+      Client: jest.fn()
+    }));
+
+    jest.doMock('@modelcontextprotocol/sdk/client/stdio.js', () => ({
+      StdioClientTransport: jest.fn()
+    }));
+
+    return require('../src/services/aiService');
+  };
+
+  test('aggregates target filings, peer filings and consumer profile signals', async () => {
+    const aiService = loadService();
+
+    jest.spyOn(aiService, 'searchCompetitors').mockResolvedValue({
+      competitors: [{ name: 'Peer A' }, { name: 'Peer B' }]
+    });
+    jest.spyOn(aiService, 'fetchFinancialData').mockImplementation(async ({ company }) => ({
+      company,
+      repoCount: 1,
+      references: [{ name: `${company} annual report`, url: `https://example.com/${company}/annual` }]
+    }));
+    jest.spyOn(aiService, 'fetchRegulatoryFilings').mockImplementation(async ({ company }) => ({
+      company,
+      filingCount: 1,
+      references: [{ name: `${company} 10-K`, url: `https://example.com/${company}/10k` }]
+    }));
+    jest.spyOn(aiService, 'fetchMarketReport').mockResolvedValue({
+      references: [
+        { name: 'Consumer profile 18-24', url: 'https://example.com/consumer-report', summary: 'Gen Z and millennials' }
+      ]
+    });
+    const fetchNewsSpy = jest.spyOn(aiService, 'fetchNewsStream').mockResolvedValue({
+      references: [
+        { name: 'Target audience 25-34', url: 'https://example.com/consumer-news', summary: 'white collar parents' }
+      ]
+    });
+
+    const result = await aiService.fetchCompanyIntelligence({
+      target: 'Acme',
+      competitorLimit: 2
+    });
+
+    expect(result.target).toBe('Acme');
+    expect(result.competitorNames).toEqual(['Peer A', 'Peer B']);
+    expect(result.targetFinancial.references.length).toBeGreaterThan(0);
+    expect(result.targetRegulatoryFilings.references.length).toBeGreaterThan(0);
+    expect(result.peerFinancials).toHaveLength(2);
+    expect(result.consumerInsights.primaryAgeRanges.map((item) => item.range)).toEqual(
+      expect.arrayContaining(['18-24', '25-34'])
+    );
+    expect(result.consumerInsights.primarySegments.map((item) => item.segment)).toEqual(
+      expect.arrayContaining(['Gen Z', 'Millennials', 'White collar', 'Parents'])
+    );
+    const newsQueries = fetchNewsSpy.mock.calls.map(([params]) => String(params?.query || ''));
+    expect(newsQueries.some((query) => /(\u8d22\u62a5|\u5e74\u62a5|annual report|investor relations)/i.test(query))).toBe(true);
+    expect(newsQueries.some((query) => /(\u7528\u6237\u753b\u50cf|\u6d88\u8d39\u8005|demographics|audience)/i.test(query))).toBe(true);
+  });
+
+  test('returns partial-failure payload when target is missing', async () => {
+    const aiService = loadService();
+    const result = await aiService.fetchCompanyIntelligence({});
+
+    expect(result).toEqual(expect.objectContaining({
+      target: '',
+      competitorNames: [],
+      peerFinancials: [],
+      meta: expect.objectContaining({
+        partialFailure: true
+      })
+    }));
+  });
+});
+
 describe('aiService OpenAI Responses adapter', () => {
   let mockLogger;
 
@@ -1000,6 +1090,18 @@ describe('aiService.generateAnalysisNarrative', () => {
         version: 'quality-policy-v2'
       }
     }));
+  });
+
+  test('builds project-specific structured prompt with evidence id constraints', () => {
+    const aiService = loadService();
+    const messages = aiService.buildNarrativeMessages(buildNarrativePayload());
+    const userMessage = messages.find((item) => item.role === 'user');
+
+    expect(userMessage?.content).toContain('evidence_ids');
+    expect(userMessage?.content).toContain('company_financial_statement_analysis');
+    expect(userMessage?.content).toContain('peer_financial_benchmark');
+    expect(userMessage?.content).toContain('consumer_demographics');
+    expect(userMessage?.content).toContain('data_gaps');
   });
 
   test('repairs unsupported-claim output and degrades with explicit reason when still unsupported', async () => {

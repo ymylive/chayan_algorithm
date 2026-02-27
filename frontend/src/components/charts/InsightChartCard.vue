@@ -10,13 +10,14 @@
 
     <div class="card-content">
       <v-chart
-        v-if="!loading"
+        v-if="!loading && hasRenderableOption"
         class="chart-view"
         :option="option"
         autoresize
         :style="{ height: `${chartHeight}px` }"
       />
-      <div v-else class="chart-loading" aria-live="polite">Loading chart...</div>
+      <div v-else-if="loading" class="chart-loading" aria-live="polite">Loading chart...</div>
+      <div v-else class="chart-empty" aria-live="polite">No chart data available</div>
     </div>
   </article>
 </template>
@@ -54,6 +55,23 @@ const viewportWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 12
 
 const chartTypeLabel = computed(() => CHART_TYPE_LABELS[props.type]);
 const chartHeight = computed(() => Math.max(props.minHeight, getResponsiveChartHeight(viewportWidth.value)));
+const hasRenderableOption = computed(() => {
+  const option = props.option as any;
+  if (!option || typeof option !== 'object') return false;
+
+  const seriesList = Array.isArray(option.series)
+    ? option.series
+    : (option.series ? [option.series] : []);
+  if (seriesList.length === 0) return false;
+
+  return seriesList.some((series) => {
+    if (!series || typeof series !== 'object') return false;
+    const data = Array.isArray(series.data) ? series.data : [];
+    const links = Array.isArray(series.links) ? series.links : [];
+    const nodes = Array.isArray(series.nodes) ? series.nodes : [];
+    return data.length > 0 || links.length > 0 || nodes.length > 0;
+  });
+});
 
 const handleResize = (): void => {
   viewportWidth.value = window.innerWidth;
@@ -142,6 +160,16 @@ onBeforeUnmount(() => {
   background: #f8fafc;
   border-radius: 10px;
   border: 1px dashed #cdd7e4;
+}
+
+.chart-empty {
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+  color: #94a3b8;
+  background: #f8fafc;
+  border-radius: 10px;
+  border: 1px dashed #d7e0eb;
 }
 
 @media (max-width: 640px) {

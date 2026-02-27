@@ -184,6 +184,97 @@
           </el-table>
         </div>
 
+        <div
+          class="section"
+          v-if="peerFinancialRows.length || consumerAgeRanges.length || consumerSegments.length || consumerReferences.length"
+        >
+          <h4>财报对比与消费者画像</h4>
+
+          <div class="intel-grid">
+            <el-card shadow="never" class="intel-card" v-if="peerFinancialRows.length">
+              <template #header>
+                <div class="intel-card-header">
+                  <span>同行财报证据</span>
+                  <el-tag size="small" type="info">{{ peerFinancialRows.length }} 条</el-tag>
+                </div>
+              </template>
+              <div class="intel-list">
+                <div class="intel-item" v-for="(item, idx) in peerFinancialRows" :key="`peer-fin-${idx}`">
+                  <div class="intel-item-title">{{ item.name || item.title || '未命名财报线索' }}</div>
+                  <div class="intel-item-meta">
+                    <span>{{ item.source || 'web' }}</span>
+                    <span>相关度 {{ toSafeNumber(item.relevanceScore, 0).toFixed(2) }}</span>
+                  </div>
+                  <el-link
+                    v-if="item.url"
+                    class="intel-link"
+                    type="primary"
+                    :href="item.url"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    :underline="false"
+                  >
+                    查看来源
+                  </el-link>
+                </div>
+              </div>
+            </el-card>
+
+            <el-card shadow="never" class="intel-card" v-if="consumerAgeRanges.length || consumerSegments.length">
+              <template #header>
+                <div class="intel-card-header">
+                  <span>消费者画像</span>
+                  <el-tag size="small" type="success">结构化信号</el-tag>
+                </div>
+              </template>
+
+              <div class="profile-group" v-if="consumerAgeRanges.length">
+                <div class="profile-title">主要年龄段</div>
+                <div class="profile-chip-wrap">
+                  <span class="profile-chip" v-for="(item, idx) in consumerAgeRanges" :key="`age-${idx}`">
+                    {{ item.range }} <strong>{{ Number(item.count || 0) }}</strong>
+                  </span>
+                </div>
+              </div>
+
+              <div class="profile-group" v-if="consumerSegments.length">
+                <div class="profile-title">主要消费群体</div>
+                <div class="profile-chip-wrap">
+                  <span class="profile-chip profile-chip--segment" v-for="(item, idx) in consumerSegments" :key="`segment-${idx}`">
+                    {{ item.segment }} <strong>{{ Number(item.count || 0) }}</strong>
+                  </span>
+                </div>
+              </div>
+            </el-card>
+          </div>
+
+          <el-card shadow="never" class="intel-card intel-card--references" v-if="consumerReferences.length">
+            <template #header>
+              <div class="intel-card-header">
+                <span>消费者研究证据</span>
+                <el-tag size="small" type="warning">{{ consumerReferences.length }} 条</el-tag>
+              </div>
+            </template>
+            <div class="intel-list">
+              <div class="intel-item" v-for="(item, idx) in consumerReferences" :key="`consumer-ref-${idx}`">
+                <div class="intel-item-title">{{ item.name || item.title || '消费者研究线索' }}</div>
+                <div class="intel-item-desc">{{ item.summary || item.description || '无摘要' }}</div>
+                <el-link
+                  v-if="item.url"
+                  class="intel-link"
+                  type="primary"
+                  :href="item.url"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  :underline="false"
+                >
+                  查看来源
+                </el-link>
+              </div>
+            </div>
+          </el-card>
+        </div>
+
         <div class="section" v-if="result.analysis?.keyFindings?.length">
           <h4>关键结论</h4>
           <ul class="insight-list">
@@ -293,7 +384,7 @@ const normalizeJobRecord = (raw: any, fallbackTarget = ''): NormalizedAnalyzeJob
   const status = normalizeStatus(raw.status || raw.phase || raw.state)
   const progress = normalizeProgress(raw.progress ?? raw.percent ?? raw.percentage, status)
   const target = String(raw.target || raw.query || raw.topic || fallbackTarget || '').trim()
-  const resultPayload = hasResultPayload(raw.result) ? raw.result : undefined
+  const resultPayload = extractResultPayload(raw.result)
 
   return {
     jobId,
@@ -321,9 +412,23 @@ const extractJobList = (payload: any) => {
 
 const extractResultPayload = (payload: any) => {
   const root = unwrapData<any>(payload)
-  if (hasResultPayload(root?.result)) return root.result
-  if (hasResultPayload(root)) return root
-  if (hasResultPayload(payload?.result)) return payload.result
+  const candidates = [
+    root?.data?.data,
+    root?.data?.result,
+    root?.result?.data,
+    root?.result,
+    root?.data,
+    root,
+    payload?.data?.data,
+    payload?.data?.result,
+    payload?.result?.data,
+    payload?.result,
+    payload?.data,
+    payload
+  ]
+  for (const candidate of candidates) {
+    if (hasResultPayload(candidate)) return candidate
+  }
   return null
 }
 
@@ -457,7 +562,58 @@ const mcpFallbackReasons = computed<string[]>(() => {
     .map((reason: string) => reasonMap[reason] || reason)
 })
 
-const evidenceCompetitors = computed<any[]>(() => result.value?.analysis?.evidence?.competitorTopSources || [])
+const evidenceCompetitors = computed<any[]>(() => {
+  const direct = result.value?.analysis?.evidence?.competitorTopSources
+  if (Array.isArray(direct) && direct.length > 0) return direct.slice(0, 8)
+
+  const competitorData = result.value?.mcp?.competitorData || {}
+  const fallbackRows = [
+    ...((Array.isArray(competitorData?.competitors) ? competitorData.competitors : [])),
+    ...((Array.isArray(competitorData?.results) ? competitorData.results : [])),
+    ...((Array.isArray(competitorData?.items) ? competitorData.items : [])),
+    ...((Array.isArray(competitorData?.data) ? competitorData.data : []))
+  ]
+
+  return fallbackRows
+    .map((item: any, index: number) => ({
+      name: String(item?.name || item?.title || item?.company || `Competitor ${index + 1}`).trim(),
+      source: String(item?.source || item?.channel || 'mcp').trim(),
+      relevanceScore: toSafeNumber(item?.relevanceScore ?? item?.score ?? item?.weight ?? item?.relevance_score, 0),
+      url: String(item?.url || '').trim()
+    }))
+    .filter((item: any) => Boolean(item.name))
+    .slice(0, 8)
+})
+const companyIntelligence = computed<any>(() => result.value?.mcp?.companyIntelligence || null)
+const peerFinancialRows = computed<any[]>(() => {
+  const direct = result.value?.analysis?.evidence?.peerFinancialTopReferences
+  if (Array.isArray(direct) && direct.length > 0) return direct.slice(0, 8)
+  const peerRows = Array.isArray(companyIntelligence.value?.peerFinancials)
+    ? companyIntelligence.value.peerFinancials
+    : []
+  return peerRows
+    .flatMap((peer: any) => (Array.isArray(peer?.references) ? peer.references : []))
+    .slice(0, 8)
+})
+const consumerReferences = computed<any[]>(() => {
+  const direct = result.value?.analysis?.evidence?.consumerTopReferences
+  if (Array.isArray(direct) && direct.length > 0) return direct.slice(0, 10)
+  const refs = companyIntelligence.value?.consumerInsights?.references
+  return Array.isArray(refs) ? refs.slice(0, 10) : []
+})
+const consumerProfile = computed<any>(() => (
+  result.value?.analysis?.evidence?.consumerProfile
+  || companyIntelligence.value?.consumerInsights
+  || null
+))
+const consumerAgeRanges = computed<any[]>(() => {
+  const rows = consumerProfile.value?.primaryAgeRanges
+  return Array.isArray(rows) ? rows.slice(0, 6) : []
+})
+const consumerSegments = computed<any[]>(() => {
+  const rows = consumerProfile.value?.primarySegments
+  return Array.isArray(rows) ? rows.slice(0, 8) : []
+})
 const streamSpeed = computed(() => (activeJob.value && !isCompletedStatus(activeJob.value.status) ? 14 : 18))
 
 const toSafeNumber = (value: unknown, fallback = 0) => {
@@ -486,13 +642,18 @@ const derivedTargetName = computed(() => {
 
 const insightPanelData = computed(() => {
   const analysis = result.value?.analysis || {}
-  const competitorRows = Array.isArray(analysis?.evidence?.competitorTopSources)
-    ? analysis.evidence.competitorTopSources
-    : []
+  const competitorRows = evidenceCompetitors.value
 
   const qualityScore = clampPercent(analysis?.qualityContract?.qualityScore, 70)
+  const completenessCandidates = [
+    analysis?.evidence?.dataCompleteness?.followup?.completenessScore,
+    analysis?.evidence?.dataCompleteness?.completenessScore,
+    analysis?.evidence?.dataCompleteness?.score,
+    analysis?.evidence?.dataCompleteness?.ratio
+  ]
+  const completenessRaw = completenessCandidates.find((value) => Number.isFinite(Number(value)))
   const completenessScore = clampPercent(
-    analysis?.evidence?.dataCompleteness?.score ?? analysis?.evidence?.dataCompleteness?.ratio,
+    Number(completenessRaw) <= 1 ? Number(completenessRaw) * 100 : Number(completenessRaw),
     66
   )
   const mcpScore = mcpHealth.value?.usedFallback ? 52 : 85
@@ -625,7 +786,8 @@ const applyJobState = async (job: NormalizedAnalyzeJob, options: { fromPolling?:
   upsertHistory(job)
 
   if (isCompletedStatus(job.status)) {
-    const resolvedResult = hasResultPayload(job.result) ? job.result : await fetchJobResult(job.jobId, true)
+    const inlineResult = extractResultPayload(job.result)
+    const resolvedResult = inlineResult || await fetchJobResult(job.jobId, true)
     if (resolvedResult) {
       setAnalysisResult(resolvedResult)
       upsertHistory({
@@ -712,8 +874,9 @@ const loadHistory = async () => {
 
 const openHistoryResult = async (row: AnalysisHistoryRecord) => {
   if (!row?.jobId) return
-  if (row.result && hasResultPayload(row.result)) {
-    setAnalysisResult(row.result)
+  const inlineResult = extractResultPayload(row.result)
+  if (inlineResult) {
+    setAnalysisResult(inlineResult)
     return
   }
 
@@ -987,6 +1150,126 @@ onUnmounted(() => {
   gap: 8px;
 }
 
+.intel-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.intel-card {
+  border: 1px solid #dbe7ff;
+  border-radius: 14px;
+  background: linear-gradient(160deg, rgba(245, 250, 255, 0.82) 0%, rgba(255, 255, 255, 0.92) 100%);
+  backdrop-filter: blur(12px);
+}
+
+.intel-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.intel-card--references {
+  margin-top: 14px;
+}
+
+.intel-list {
+  display: grid;
+  gap: 10px;
+}
+
+.intel-item {
+  border: 1px solid #e6edf8;
+  border-radius: 12px;
+  padding: 12px;
+  background: #fff;
+  transition: box-shadow 180ms ease, transform 180ms ease;
+}
+
+.intel-item:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.08);
+}
+
+.intel-item-title {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: #1e293b;
+}
+
+.intel-item-meta {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+  color: #667085;
+}
+
+.intel-item-desc {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #475467;
+}
+
+.intel-link {
+  margin-top: 6px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  transition: color 180ms ease;
+}
+
+.profile-group + .profile-group {
+  margin-top: 12px;
+}
+
+.profile-title {
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.profile-chip-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.profile-chip {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #ebf2ff;
+  color: #1f4578;
+  font-size: 12px;
+}
+
+.profile-chip strong {
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+.profile-chip--segment {
+  background: #fff4e8;
+  color: #8f3a0c;
+}
+
+.profile-chip--segment strong {
+  color: #d9480f;
+}
+
 .insight-list {
   margin: 0;
   padding: 0;
@@ -1024,6 +1307,10 @@ onUnmounted(() => {
   .ai-analyze-page {
     padding: 18px;
   }
+
+  .intel-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 768px) {
@@ -1057,6 +1344,14 @@ onUnmounted(() => {
 
   .pipeline-arrow {
     display: none;
+  }
+
+  .intel-item {
+    padding: 10px;
+  }
+
+  .profile-chip {
+    min-height: 32px;
   }
 }
 </style>

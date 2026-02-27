@@ -140,10 +140,28 @@ const DEFAULT_GRAPH: GraphData = {
   seriesName: 'Relations',
 };
 
-const radarData = computed<RadarData>(() => props.data?.radar ?? DEFAULT_RADAR);
-const lineData = computed<CartesianData>(() => props.data?.line ?? DEFAULT_LINE);
-const barData = computed<CartesianData>(() => props.data?.bar ?? DEFAULT_BAR);
-const graphData = computed<GraphData>(() => props.data?.graph ?? DEFAULT_GRAPH);
+const isValidRadarData = (value?: RadarData): value is RadarData => {
+  if (!value) return false;
+  return Array.isArray(value.indicators) && value.indicators.length > 0
+    && Array.isArray(value.values) && value.values.length > 0;
+};
+
+const isValidCartesianData = (value?: CartesianData): value is CartesianData => {
+  if (!value) return false;
+  return Array.isArray(value.categories) && value.categories.length > 0
+    && Array.isArray(value.values) && value.values.length > 0;
+};
+
+const isValidGraphData = (value?: GraphData): value is GraphData => {
+  if (!value) return false;
+  return Array.isArray(value.nodes) && value.nodes.length > 0
+    && Array.isArray(value.links) && value.links.length > 0;
+};
+
+const radarData = computed<RadarData>(() => (isValidRadarData(props.data?.radar) ? props.data!.radar : DEFAULT_RADAR));
+const lineData = computed<CartesianData>(() => (isValidCartesianData(props.data?.line) ? props.data!.line : DEFAULT_LINE));
+const barData = computed<CartesianData>(() => (isValidCartesianData(props.data?.bar) ? props.data!.bar : DEFAULT_BAR));
+const graphData = computed<GraphData>(() => (isValidGraphData(props.data?.graph) ? props.data!.graph : DEFAULT_GRAPH));
 
 const radarOption = computed(() => createRadarChartOption(radarData.value));
 const lineOption = computed(() => createLineChartOption(lineData.value));

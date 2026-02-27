@@ -687,6 +687,53 @@ describe('mcpController.aiAnalyze', () => {
     expect(payload.data.analysis.aiMeta.degraded).toBe(false);
   });
 
+  test('adds financial and consumer follow-up retrieval tasks for persistent data gaps', async () => {
+    const { aiAnalyze } = require('../src/controllers/mcpController');
+
+    mockRedis.get.mockResolvedValueOnce(null);
+    mockPool.query
+      .mockResolvedValueOnce({ rows: [{ id: 1, name: 'A', industry: '新能源', created_at: new Date().toISOString() }] });
+
+    mockAiService.searchIndustryData.mockResolvedValue({ results: [] });
+    mockAiService.searchCompetitors.mockResolvedValue({
+      competitors: [{ name: 'Competitor A', source: 'bing_web', relevanceScore: 1.1 }],
+      meta: { sourceCounts: { bing_web: 1 } }
+    });
+    mockAiService.fetchMarketReport.mockResolvedValue({ references: [] });
+    mockAiService.fetchFinancialData.mockResolvedValue({ repoCount: 0, references: [] });
+    mockAiService.fetchRegulatoryFilings.mockResolvedValue({ filingCount: 0, references: [] });
+    mockAiService.fetchNewsStream.mockImplementation((params = {}) => {
+      const query = String(params?.query || '');
+      if (/(\u8d22\u62a5|\u5e74\u62a5|\u8425\u6536|\u51c0\u5229\u6da6|investor)/i.test(query)) {
+        return Promise.resolve({
+          references: [{ name: 'Financial signal', url: 'https://example.com/financial-news' }]
+        });
+      }
+      return Promise.resolve({ references: [] });
+    });
+    mockAiService.generateAnalysisNarrative.mockResolvedValueOnce({
+      text: 'ok',
+      modelUsed: 'model-x',
+      degraded: false,
+      promptVersion: 'v1'
+    });
+
+    const req = { body: { target: '新能源' } };
+    const res = buildRes();
+    const next = jest.fn();
+
+    await aiAnalyze(req, res, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(mockAiService.fetchRegulatoryFilings.mock.calls.length).toBeGreaterThan(1);
+
+    const marketQueries = mockAiService.fetchMarketReport.mock.calls.map((call) => String(call?.[0]?.query || ''));
+    expect(marketQueries.some((query) => /(\u7528\u6237\u753b\u50cf|\u6d88\u8d39\u8005|\u5e74\u9f84)/i.test(query))).toBe(true);
+
+    const newsQueries = mockAiService.fetchNewsStream.mock.calls.map((call) => String(call?.[0]?.query || ''));
+    expect(newsQueries.some((query) => /(\u8d22\u62a5|\u5e74\u62a5|\u8425\u6536|\u51c0\u5229\u6da6|investor)/i.test(query))).toBe(true);
+  });
+
   test('returns explicit completeness degraded reason when follow-up budget exhausts', async () => {
     const { aiAnalyze } = require('../src/controllers/mcpController');
 
