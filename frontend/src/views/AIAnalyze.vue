@@ -139,6 +139,43 @@
           />
         </div>
 
+        <div class="section" v-if="coverageOverviewCards.length">
+          <h4>数据覆盖快照</h4>
+
+          <div class="coverage-grid">
+            <div class="coverage-card" v-for="item in coverageOverviewCards" :key="item.label">
+              <div class="coverage-label">{{ item.label }}</div>
+              <div class="coverage-value">{{ item.value }}</div>
+              <div class="coverage-note">{{ item.note }}</div>
+            </div>
+          </div>
+
+          <el-alert
+            v-if="dataGapReasonLabels.length"
+            class="coverage-alert"
+            type="warning"
+            show-icon
+            :closable="false"
+          >
+            <template #title>数据缺口</template>
+            <div class="gap-list">
+              <span class="gap-chip" v-for="(item, idx) in dataGapReasonLabels" :key="`gap-${idx}`">{{ item }}</span>
+            </div>
+          </el-alert>
+
+          <el-card v-if="suggestedGapQueries.length" shadow="never" class="query-card">
+            <template #header>
+              <div class="intel-card-header">
+                <span>建议补数检索词</span>
+                <el-tag size="small" type="info">{{ suggestedGapQueries.length }} 条</el-tag>
+              </div>
+            </template>
+            <div class="query-list">
+              <span class="query-chip" v-for="(item, idx) in suggestedGapQueries" :key="`query-${idx}`">{{ item }}</span>
+            </div>
+          </el-card>
+        </div>
+
         <div class="section" v-if="result.analysis?.aiNarrative">
           <h4>AI 深度解读</h4>
           <el-card shadow="never" class="narrative-card">
@@ -325,6 +362,14 @@ const AI_JOB_POLL_INTERVAL_MS = 2000
 const COMPLETED_STATUS_SET = new Set(['completed', 'success', 'done'])
 const FAILED_STATUS_SET = new Set(['failed', 'error', 'aborted', 'cancelled'])
 const RUNNING_STATUS_SET = new Set(['running', 'processing', 'in_progress', 'queued', 'pending'])
+const DATA_GAP_REASON_LABELS: Record<string, string> = {
+  industrySignalsMissing: '行业信号不足',
+  competitorsInsufficient: '竞品样本不足',
+  competitorRelevanceLow: '竞品相关度偏低',
+  marketReferencesMissing: '市场报告证据不足',
+  financialReferencesMissing: '财报与财务证据不足',
+  sourceCoverageWeak: '来源覆盖度偏弱'
+}
 
 type NormalizedAnalyzeJob = {
   jobId: string
@@ -632,6 +677,98 @@ const clampPercent = (value: unknown, fallback = 0) => {
   return Math.max(0, Math.min(100, Math.round(numeric)))
 }
 
+const resolvePercentScore = (candidates: unknown[], fallback = 0) => {
+  const raw = candidates.find((value) => Number.isFinite(Number(value)))
+  if (raw === undefined) return clampPercent(fallback, fallback)
+  const normalized = Number(raw) <= 1 ? Number(raw) * 100 : Number(raw)
+  return clampPercent(normalized, fallback)
+}
+
+const dataCoverageSnapshot = computed(() => {
+  const dataCompletenessNode = result.value?.analysis?.evidence?.dataCompleteness || {}
+  const metricsNode = dataCompletenessNode?.metrics || {}
+  const followupNode = dataCompletenessNode?.followup || {}
+
+  const completenessScore = resolvePercentScore(
+    [
+      followupNode?.completenessScore,
+      dataCompletenessNode?.completenessScore,
+      dataCompletenessNode?.score,
+      dataCompletenessNode?.ratio
+    ],
+    0
+  )
+
+  const sourceCoverageCount = Math.max(0, Math.round(toSafeNumber(metricsNode?.sourceCoverageCount, 0)))
+  const marketReferenceCount = Math.max(0, Math.round(toSafeNumber(metricsNode?.marketReferenceCount, 0)))
+  const financialReferenceCount = Math.max(0, Math.round(toSafeNumber(metricsNode?.financialReferenceCount, 0)))
+  const competitorSignalCount = Math.max(
+    evidenceCompetitors.value.length,
+    Math.round(toSafeNumber(metricsNode?.competitorSignalCount, 0))
+  )
+  const peerFinancialCount = peerFinancialRows.value.length
+  const consumerReferenceCount = consumerReferences.value.length
+  const consumerSignalCount = consumerAgeRanges.value.length + consumerSegments.value.length
+
+  const rawGapReasons = Array.isArray(dataCompletenessNode?.dataGapReasons)
+    ? dataCompletenessNode.dataGapReasons
+    : []
+  const dataGapReasons = rawGapReasons
+    .map((reason: unknown) => String(reason || '').trim())
+    .filter(Boolean)
+    .map((reason: string) => DATA_GAP_REASON_LABELS[reason] || reason)
+    .slice(0, 6)
+
+  const suggestedQueries = Array.isArray(dataCompletenessNode?.suggestedQueries)
+    ? dataCompletenessNode.suggestedQueries
+      .map((item: unknown) => String(item || '').trim())
+      .filter(Boolean)
+      .slice(0, 8)
+    : []
+
+  return {
+    completenessScore,
+    sourceCoverageCount,
+    marketReferenceCount,
+    financialReferenceCount,
+    competitorSignalCount,
+    peerFinancialCount,
+    consumerReferenceCount,
+    consumerSignalCount,
+    dataGapReasons,
+    suggestedQueries
+  }
+})
+
+const coverageOverviewCards = computed(() => {
+  const snapshot = dataCoverageSnapshot.value
+  return [
+    {
+      label: '数据完整度',
+      value: `${snapshot.completenessScore}%`,
+      note: '来自 dataCompleteness 评估'
+    },
+    {
+      label: '来源覆盖',
+      value: `${snapshot.sourceCoverageCount} 个`,
+      note: '竞品来源去重后统计'
+    },
+    {
+      label: '财报证据',
+      value: `${snapshot.financialReferenceCount + snapshot.peerFinancialCount} 条`,
+      note: '目标与同行财务线索'
+    },
+    {
+      label: '消费者信号',
+      value: `${snapshot.consumerReferenceCount + snapshot.consumerSignalCount} 条`,
+      note: '画像引用与结构化分群'
+    }
+  ]
+})
+
+const dataGapReasonLabels = computed(() => dataCoverageSnapshot.value.dataGapReasons)
+const suggestedGapQueries = computed(() => dataCoverageSnapshot.value.suggestedQueries)
+
 const derivedTargetName = computed(() => {
   const direct = String(result.value?.model?.target || '').trim()
   if (direct) return direct
@@ -643,29 +780,32 @@ const derivedTargetName = computed(() => {
 const insightPanelData = computed(() => {
   const analysis = result.value?.analysis || {}
   const competitorRows = evidenceCompetitors.value
+  const coverage = dataCoverageSnapshot.value
 
   const qualityScore = clampPercent(analysis?.qualityContract?.qualityScore, 70)
-  const completenessCandidates = [
-    analysis?.evidence?.dataCompleteness?.followup?.completenessScore,
-    analysis?.evidence?.dataCompleteness?.completenessScore,
-    analysis?.evidence?.dataCompleteness?.score,
-    analysis?.evidence?.dataCompleteness?.ratio
-  ]
-  const completenessRaw = completenessCandidates.find((value) => Number.isFinite(Number(value)))
-  const completenessScore = clampPercent(
-    Number(completenessRaw) <= 1 ? Number(completenessRaw) * 100 : Number(completenessRaw),
-    66
+  const completenessScore = coverage.completenessScore
+  const sourceCoverageScore = clampPercent(coverage.sourceCoverageCount * 24, 40)
+  const financialSignalScore = clampPercent(
+    coverage.financialReferenceCount * 12 + coverage.peerFinancialCount * 10,
+    36
   )
-  const mcpScore = mcpHealth.value?.usedFallback ? 52 : 85
+  const consumerSignalScore = clampPercent(
+    coverage.consumerReferenceCount * 10 + coverage.consumerSignalCount * 8,
+    34
+  )
+  const mcpScore = clampPercent(
+    86 + Math.min(8, coverage.sourceCoverageCount * 2) - (mcpHealth.value?.usedFallback ? 24 : 0),
+    62
+  )
   const findingsScore = clampPercent(Array.isArray(analysis?.keyFindings) ? analysis.keyFindings.length * 18 : 0, 58)
   const suggestionsScore = clampPercent(Array.isArray(analysis?.suggestions) ? analysis.suggestions.length * 18 : 0, 60)
 
   const trendBase = [
-    clampPercent(qualityScore * 0.72 + completenessScore * 0.28, 70),
-    clampPercent(qualityScore * 0.78 + mcpScore * 0.22, 72),
-    clampPercent(qualityScore * 0.82 + findingsScore * 0.18, 74),
-    clampPercent(qualityScore * 0.86 + suggestionsScore * 0.14, 76),
-    clampPercent(qualityScore, 78)
+    clampPercent(completenessScore * 0.7 + sourceCoverageScore * 0.3, 56),
+    clampPercent(completenessScore * 0.65 + financialSignalScore * 0.35, 60),
+    clampPercent(qualityScore * 0.7 + findingsScore * 0.3, 64),
+    clampPercent(qualityScore * 0.7 + suggestionsScore * 0.3, 68),
+    clampPercent((qualityScore + completenessScore + mcpScore) / 3, 70)
   ]
 
   const topCompetitors: CompetitorScore[] = competitorRows
@@ -675,12 +815,20 @@ const insightPanelData = computed(() => {
     }))
     .slice(0, 6)
 
+  const fallbackEvidenceBars = [
+    { name: '市场证据', value: coverage.marketReferenceCount },
+    { name: '财报证据', value: coverage.financialReferenceCount + coverage.peerFinancialCount },
+    { name: '消费证据', value: coverage.consumerReferenceCount },
+    { name: '竞品信号', value: coverage.competitorSignalCount }
+  ]
   const barCategories = topCompetitors.length
     ? topCompetitors.map((item: CompetitorScore) => item.name)
-    : ['Competitor A', 'Competitor B', 'Competitor C']
+    : fallbackEvidenceBars.map((item) => item.name)
   const barValues = topCompetitors.length
     ? topCompetitors.map((item: CompetitorScore) => Number(item.score.toFixed(2)))
-    : [72, 64, 58]
+    : fallbackEvidenceBars.map((item) => Number(item.value.toFixed(2)))
+  const barSeriesName = topCompetitors.length ? 'Competitor Relevance' : 'Evidence Coverage'
+  const barUnit = topCompetitors.length ? 'score' : 'count'
 
   const graphNodes = [
     { id: 'target', name: derivedTargetName.value, category: 0, symbolSize: 62, value: 100 }
@@ -704,10 +852,32 @@ const insightPanelData = computed(() => {
   })
 
   if (!topCompetitors.length) {
-    ;['Signal', 'Model', 'Narrative'].forEach((name, index) => {
-      const nodeId = `system-${index}`
-      graphNodes.push({ id: nodeId, name, category: 2, symbolSize: 36, value: 70 - index * 6 })
-      graphLinks.push({ source: 'target', target: nodeId, value: 65 - index * 8 })
+    const fallbackNodes = [
+      {
+        id: 'evidence-market',
+        name: `市场(${coverage.marketReferenceCount})`,
+        category: 2,
+        symbolSize: 36,
+        value: coverage.marketReferenceCount
+      },
+      {
+        id: 'evidence-financial',
+        name: `财报(${coverage.financialReferenceCount + coverage.peerFinancialCount})`,
+        category: 2,
+        symbolSize: 38,
+        value: coverage.financialReferenceCount + coverage.peerFinancialCount
+      },
+      {
+        id: 'evidence-consumer',
+        name: `消费(${coverage.consumerReferenceCount + coverage.consumerSignalCount})`,
+        category: 2,
+        symbolSize: 34,
+        value: coverage.consumerReferenceCount + coverage.consumerSignalCount
+      }
+    ]
+    fallbackNodes.forEach((node) => {
+      graphNodes.push(node)
+      graphLinks.push({ source: 'target', target: node.id, value: Number((node.value || 0).toFixed(2)) })
     })
   }
 
@@ -715,12 +885,12 @@ const insightPanelData = computed(() => {
     radar: {
       indicators: [
         { name: 'Quality', max: 100 },
-        { name: 'Evidence', max: 100 },
-        { name: 'MCP Reliability', max: 100 },
-        { name: 'Findings', max: 100 },
-        { name: 'Suggestions', max: 100 }
+        { name: 'Data Coverage', max: 100 },
+        { name: 'Source Coverage', max: 100 },
+        { name: 'Financial Signals', max: 100 },
+        { name: 'Consumer Signals', max: 100 }
       ],
-      values: [qualityScore, completenessScore, mcpScore, findingsScore, suggestionsScore],
+      values: [qualityScore, completenessScore, sourceCoverageScore, financialSignalScore, consumerSignalScore],
       seriesName: 'AI Insight Quality'
     },
     line: {
@@ -732,8 +902,8 @@ const insightPanelData = computed(() => {
     bar: {
       categories: barCategories,
       values: barValues,
-      seriesName: 'Competitor Relevance',
-      unit: 'score'
+      seriesName: barSeriesName,
+      unit: barUnit
     },
     graph: {
       categories: [
@@ -1117,6 +1287,81 @@ onUnmounted(() => {
   margin: 0 0 16px;
 }
 
+.coverage-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.coverage-card {
+  border: 1px solid #d8e7ff;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f7fbff 0%, #ffffff 100%);
+  padding: 12px;
+  min-height: 108px;
+}
+
+.coverage-label {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.coverage-value {
+  margin-top: 6px;
+  font-size: 24px;
+  line-height: 1.2;
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+.coverage-note {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #475569;
+}
+
+.coverage-alert {
+  margin-top: 12px;
+}
+
+.gap-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.gap-chip,
+.query-chip {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.gap-chip {
+  background: #fff5ec;
+  color: #9a3412;
+}
+
+.query-card {
+  margin-top: 12px;
+}
+
+.query-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.query-chip {
+  background: #edf4ff;
+  color: #1e3a8a;
+}
+
 .narrative-card {
   background: #f8faff;
   border-left: 4px solid #1a73e8;
@@ -1308,6 +1553,10 @@ onUnmounted(() => {
     padding: 18px;
   }
 
+  .coverage-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .intel-grid {
     grid-template-columns: 1fr;
   }
@@ -1348,6 +1597,14 @@ onUnmounted(() => {
 
   .intel-item {
     padding: 10px;
+  }
+
+  .coverage-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .coverage-card {
+    min-height: 92px;
   }
 
   .profile-chip {
