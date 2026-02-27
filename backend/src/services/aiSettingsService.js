@@ -255,7 +255,7 @@ const normalizeSettings = (settings) => ({
   tertiaryModel: settings.tertiaryModel || '',
   temperature: typeof settings.temperature === 'number' ? settings.temperature : DEFAULT_SETTINGS.temperature,
   maxTokens: typeof settings.maxTokens === 'number' ? settings.maxTokens : DEFAULT_SETTINGS.maxTokens,
-  useMock: toBoolean(settings.useMock, DEFAULT_SETTINGS.useMock),
+  useMock: false,
   qualityContractEnabled: toBoolean(settings.qualityContractEnabled, DEFAULT_SETTINGS.qualityContractEnabled),
   qualityStrictMode: toBoolean(settings.qualityStrictMode, DEFAULT_SETTINGS.qualityStrictMode),
   qualityMinCoverageSources: parsePositiveInt(
@@ -313,9 +313,6 @@ const buildSeedSettings = () => {
     ...(process.env.AI_TERTIARY_MODEL ? { tertiaryModel: process.env.AI_TERTIARY_MODEL } : {}),
     ...(envTemperature !== null ? { temperature: envTemperature } : {}),
     ...(envMaxTokens !== null && envMaxTokens > 0 ? { maxTokens: envMaxTokens } : {}),
-    ...(process.env.AI_USE_MOCK !== undefined
-      ? { useMock: toBoolean(process.env.AI_USE_MOCK, DEFAULT_SETTINGS.useMock) }
-      : {}),
     ...(process.env.AI_QUALITY_CONTRACT_ENABLED !== undefined
       ? { qualityContractEnabled: toBoolean(process.env.AI_QUALITY_CONTRACT_ENABLED, DEFAULT_SETTINGS.qualityContractEnabled) }
       : {}),
@@ -402,7 +399,7 @@ const updateUserSettings = async (userId, patch) => {
     tertiaryModel: patch.tertiaryModel || existing.tertiaryModel,
     temperature: typeof patch.temperature === 'number' ? patch.temperature : existing.temperature,
     maxTokens: typeof patch.maxTokens === 'number' ? patch.maxTokens : existing.maxTokens,
-    useMock: typeof patch.useMock === 'boolean' ? patch.useMock : existing.useMock,
+    useMock: false,
     qualityContractEnabled: hasQualityContractEnabled
       ? toBoolean(patch.qualityContractEnabled, existing.qualityContractEnabled)
       : existing.qualityContractEnabled,

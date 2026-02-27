@@ -6,7 +6,7 @@
         type="button"
         class="menu-button"
         :aria-expanded="props.mobileMenuOpen"
-        :aria-label="props.mobileMenuOpen ? 'Close menu' : 'Open menu'"
+        :aria-label="props.mobileMenuOpen ? t('layout.closeMenu') : t('layout.openMenu')"
         @click="emit('toggle-menu')"
       >
         <svg
@@ -49,7 +49,7 @@
           class="logout-button"
           @click="emit('logout')"
         >
-          Logout
+          {{ t('layout.logout') }}
         </button>
       </slot>
     </div>
@@ -57,6 +57,9 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 const props = withDefaults(
   defineProps<{
     title?: string

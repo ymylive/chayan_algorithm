@@ -1,7 +1,7 @@
 <template>
   <el-container class="main-layout">
     <AppSidebar
-      app-name="ChaYan Analytics"
+      :app-name="t('layout.appName')"
       :is-mobile="isMobile"
       :mobile-open="mobileMenuOpen"
       :collapsed="isCollapsed"
@@ -20,9 +20,21 @@
         @logout="handleLogout"
       >
         <template #right>
+          <div class="locale-switch" role="group" :aria-label="t('layout.language')">
+            <button
+              v-for="item in localeOptions"
+              :key="item.value"
+              type="button"
+              class="locale-button"
+              :class="{ 'is-active': currentLocale === item.value }"
+              @click="setLocale(item.value)"
+            >
+              {{ item.label }}
+            </button>
+          </div>
           <span class="avatar-placeholder" aria-hidden="true">A</span>
-          <span class="user-name">Admin</span>
-          <button type="button" class="logout-button" @click="handleLogout">Logout</button>
+          <span class="user-name">{{ t('layout.user') }}</span>
+          <button type="button" class="logout-button" @click="handleLogout">{{ t('layout.logout') }}</button>
         </template>
       </AppTopbar>
 
@@ -46,11 +58,13 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import AppSidebar from '../components/layout/AppSidebar.vue'
 import AppTopbar from '../components/layout/AppTopbar.vue'
 import AppSkeleton from '../components/feedback/AppSkeleton.vue'
 import request from '../utils/request'
+import { getSupportedLocales, persistLocale } from '../i18n'
 
 const MOBILE_BREAKPOINT = 992
 const SIDEBAR_COLLAPSED_KEY = 'layout_sidebar_collapsed'
@@ -60,30 +74,23 @@ const mobileMenuOpen = ref(false)
 const isCollapsed = ref(false)
 const route = useRoute()
 const router = useRouter()
+const { t, locale } = useI18n()
+const localeOptions = computed(() => getSupportedLocales().map((item) => ({
+  value: item,
+  label: item === 'en-US' ? t('layout.en') : t('layout.zh')
+})))
+const currentLocale = computed(() => String(locale.value || 'zh-CN'))
 
 if (typeof window !== 'undefined') {
   isCollapsed.value = localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'
 }
 
-const pageNameMap: Record<string, string> = {
-  '/': 'Overview',
-  '/upload': 'Data Upload',
-  '/analysis': 'Analysis',
-  '/recommendations': 'Recommendations',
-  '/ai-analyze': 'AI Analyze',
-  '/ai-settings': 'AI Settings',
-  '/deep-research': 'Deep Research'
-}
-
 const currentPageName = computed(() => {
-  const exactMatch = pageNameMap[route.path]
-  if (exactMatch) return exactMatch
-
-  const partialMatch = Object.entries(pageNameMap).find(([path]) => route.path.startsWith(`${path}/`))
-  return partialMatch?.[1] ?? 'Workspace'
+  const titleKey = String(route.meta?.titleKey || 'layout.workspace').trim()
+  return titleKey ? t(titleKey) : t('layout.workspace')
 })
 
-const topbarSubtitle = computed(() => 'LLM Multi-Dimensional Enterprise Intelligence')
+const topbarSubtitle = computed(() => t('layout.subtitle'))
 
 const updateIsMobile = () => {
   isMobile.value = window.innerWidth <= MOBILE_BREAKPOINT
@@ -108,6 +115,12 @@ const handleMenuNavigate = () => {
   if (isMobile.value) {
     mobileMenuOpen.value = false
   }
+}
+
+const setLocale = (nextLocale: string) => {
+  if (nextLocale !== 'zh-CN' && nextLocale !== 'en-US') return
+  locale.value = nextLocale
+  persistLocale(nextLocale)
 }
 
 const handleLogout = async () => {
@@ -194,6 +207,38 @@ onBeforeUnmount(() => {
   font-weight: 600;
 }
 
+.locale-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.locale-button {
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #475569;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease;
+}
+
+.locale-button.is-active {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+}
+
+.locale-button:hover {
+  border-color: #cbd5e1;
+}
+
 .user-name {
   color: #334155;
   font-size: 13px;
@@ -222,6 +267,17 @@ onBeforeUnmount(() => {
 @media (max-width: 992px) {
   .content-area {
     padding: 12px;
+  }
+
+  .locale-switch {
+    padding: 2px;
+    gap: 4px;
+  }
+
+  .locale-button {
+    min-height: 32px;
+    padding: 0 8px;
+    font-size: 11px;
   }
 
   .user-name {

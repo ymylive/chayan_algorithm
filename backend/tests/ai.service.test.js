@@ -1064,11 +1064,25 @@ describe('aiService.generateAnalysisNarrative', () => {
   test('maps quality feature flags into narrative metadata', async () => {
     const aiService = loadService();
 
-    process.env.AI_USE_MOCK = 'true';
+    process.env.AI_BASE_URL = 'https://openrouter.ai/api/v1';
+    process.env.AI_API_KEY = 'test-key';
+    process.env.AI_MODEL = 'primary-model';
+    process.env.AI_PROTOCOL = 'chat_completions';
+    process.env.AI_RETRY_MAX_ATTEMPTS = '1';
+    process.env.AI_RETRY_BASE_DELAY_MS = '1';
     process.env.AI_QUALITY_CONTRACT_ENABLED = '0';
     process.env.AI_QUALITY_STRICT_MODE = 'yes';
     process.env.AI_QUALITY_MIN_COVERAGE_SOURCES = '5';
     process.env.AI_QUALITY_POLICY_VERSION = 'quality-policy-v2';
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: { get: jest.fn().mockReturnValue(null) },
+      text: jest.fn().mockResolvedValue(JSON.stringify({
+        choices: [{ message: { content: '结构化测试输出' }, finish_reason: 'stop' }],
+        model: 'primary-model'
+      }))
+    });
 
     const result = await aiService.generateAnalysisNarrative({
       target: '新能源',

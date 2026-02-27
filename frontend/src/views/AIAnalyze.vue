@@ -9,35 +9,35 @@
                 <el-icon><Cpu /></el-icon>
               </span>
               <div>
-                <div class="title-main">AI 智能分析</div>
-                <div class="title-sub">分步骤分析公司数据，支持离开页面后后台持续运行。</div>
+                <div class="title-main">{{ t('aiAnalyze.header.title') }}</div>
+                <div class="title-sub">{{ t('aiAnalyze.header.subtitle') }}</div>
               </div>
             </div>
           </div>
         </template>
 
         <el-form :model="form" label-width="120px" class="form-area">
-          <el-form-item label="分析对象">
+          <el-form-item :label="t('aiAnalyze.form.target')">
             <el-input
               v-model="form.target"
-              placeholder="例如：茶颜悦色、特斯拉、苹果、华为"
+              :placeholder="t('aiAnalyze.form.placeholder')"
               clearable
               @keyup.enter="runAnalyze"
             />
           </el-form-item>
 
           <el-form-item>
-            <el-button type="primary" :loading="loading" @click="runAnalyze">开始分析</el-button>
+            <el-button type="primary" :loading="loading" @click="runAnalyze">{{ t('aiAnalyze.form.start') }}</el-button>
           </el-form-item>
 
           <div class="pipeline-hint">
-            <span class="pipeline-step">识别竞品公司</span>
+            <span class="pipeline-step">{{ t('aiAnalyze.pipeline.detectPeers') }}</span>
             <span class="pipeline-arrow">→</span>
-            <span class="pipeline-step">MCP 搜索信号</span>
+            <span class="pipeline-step">{{ t('aiAnalyze.pipeline.mcpSearch') }}</span>
             <span class="pipeline-arrow">→</span>
-            <span class="pipeline-step">模型评分</span>
+            <span class="pipeline-step">{{ t('aiAnalyze.pipeline.modelScore') }}</span>
             <span class="pipeline-arrow">→</span>
-            <span class="pipeline-step">AI 叙事生成</span>
+            <span class="pipeline-step">{{ t('aiAnalyze.pipeline.narrative') }}</span>
           </div>
         </el-form>
       </el-card>
@@ -48,7 +48,7 @@
             <span class="result-icon">
               <el-icon><Cpu /></el-icon>
             </span>
-            <span>实时分析进度</span>
+            <span>{{ t('aiAnalyze.progress.title') }}</span>
           </div>
         </template>
 
@@ -66,53 +66,54 @@
             <span class="result-icon">
               <el-icon><Document /></el-icon>
             </span>
-            <span>历史分析记录</span>
-            <el-button text class="history-refresh" @click="loadHistory">刷新</el-button>
+            <span>{{ t('aiAnalyze.history.title') }}</span>
+            <el-button text class="history-refresh" @click="loadHistory">{{ t('aiAnalyze.history.refresh') }}</el-button>
           </div>
         </template>
 
-        <el-empty v-if="!historyLoading && !historyRows.length" description="暂无历史记录" />
+        <el-empty v-if="!historyLoading && !historyRows.length" :description="t('aiAnalyze.history.empty')" />
 
-        <el-table
-          v-else
-          v-loading="historyLoading"
-          :data="historyRows"
-          border
-          stripe
-          size="small"
-          class="data-table"
-          :row-class-name="historyRowClassName"
-        >
-          <el-table-column prop="target" label="分析对象" min-width="180" show-overflow-tooltip />
-          <el-table-column prop="status" label="状态" width="120">
-            <template #default="scope">
-              <el-tag
-                :type="isCompletedStatus(scope.row.status) ? 'success' : (isFailedStatus(scope.row.status) ? 'danger' : 'warning')"
-                size="small"
-              >
-                {{ scope.row.status }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="progress" label="进度" width="90" />
-          <el-table-column prop="step" label="步骤" min-width="150" show-overflow-tooltip />
-          <el-table-column prop="createdAt" label="创建时间" min-width="180">
-            <template #default="scope">{{ formatHistoryTime(scope.row.createdAt) }}</template>
-          </el-table-column>
-          <el-table-column label="操作" width="120" fixed="right">
-            <template #default="scope">
-              <el-button
-                text
-                class="history-action"
-                :loading="historyResultLoadingJobId === scope.row.jobId"
-                :disabled="!isCompletedStatus(scope.row.status)"
-                @click="openHistoryResult(scope.row)"
-              >
-                查看结果
-              </el-button>
-            </template>
-          </el-table-column>
-        </el-table>
+        <div v-else class="table-scroll-x">
+          <el-table
+            v-loading="historyLoading"
+            :data="historyRows"
+            border
+            stripe
+            size="small"
+            class="data-table"
+            :row-class-name="historyRowClassName"
+          >
+            <el-table-column prop="target" :label="t('aiAnalyze.history.target')" min-width="180" show-overflow-tooltip />
+            <el-table-column prop="status" :label="t('aiAnalyze.history.status')" width="120">
+              <template #default="scope">
+                <el-tag
+                  :type="isCompletedStatus(scope.row.status) ? 'success' : (isFailedStatus(scope.row.status) ? 'danger' : 'warning')"
+                  size="small"
+                >
+                  {{ scope.row.status }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="progress" :label="t('aiAnalyze.history.progress')" width="90" />
+            <el-table-column prop="step" :label="t('aiAnalyze.history.step')" min-width="150" show-overflow-tooltip />
+            <el-table-column prop="createdAt" :label="t('aiAnalyze.history.createdAt')" min-width="180">
+              <template #default="scope">{{ formatHistoryTime(scope.row.createdAt) }}</template>
+            </el-table-column>
+            <el-table-column :label="t('aiAnalyze.history.action')" width="120" fixed="right">
+              <template #default="scope">
+                <el-button
+                  text
+                  class="history-action"
+                  :loading="historyResultLoadingJobId === scope.row.jobId"
+                  :disabled="!isCompletedStatus(scope.row.status)"
+                  @click="openHistoryResult(scope.row)"
+                >
+                  {{ t('aiAnalyze.history.viewResult') }}
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
       </el-card>
 
       <el-card v-if="result" class="result-card">
@@ -121,26 +122,26 @@
             <span class="result-icon">
               <el-icon><Document /></el-icon>
             </span>
-            <span>分析报告</span>
+            <span>{{ t('aiAnalyze.report.title') }}</span>
           </div>
         </template>
 
         <div class="summary-banner">
-          <div class="summary-title">摘要结论</div>
-          <div class="summary-text">{{ result.analysis?.summary || '暂无摘要' }}</div>
+          <div class="summary-title">{{ t('aiAnalyze.report.summaryTitle') }}</div>
+          <div class="summary-text">{{ result.analysis?.summary || t('aiAnalyze.report.summaryEmpty') }}</div>
         </div>
 
         <div class="section">
-          <h4>多维分析图谱</h4>
+          <h4>{{ t('aiAnalyze.report.dashboardTitle') }}</h4>
           <MultiDimensionalInsightPanel
-            title="LLM Insight Dashboard"
-            description="Quality, evidence completeness, competitive signals, and relationship network."
+            :title="t('aiAnalyze.report.dashboardName')"
+            :description="t('aiAnalyze.report.dashboardDescription')"
             :data="insightPanelData"
           />
         </div>
 
         <div class="section" v-if="coverageOverviewCards.length">
-          <h4>数据覆盖快照</h4>
+          <h4>{{ t('aiAnalyze.section.coverage') }}</h4>
 
           <div class="coverage-grid">
             <div class="coverage-card" v-for="item in coverageOverviewCards" :key="item.label">
@@ -157,7 +158,7 @@
             show-icon
             :closable="false"
           >
-            <template #title>数据缺口</template>
+            <template #title>{{ t('aiAnalyze.section.dataGap') }}</template>
             <div class="gap-list">
               <span class="gap-chip" v-for="(item, idx) in dataGapReasonLabels" :key="`gap-${idx}`">{{ item }}</span>
             </div>
@@ -166,8 +167,8 @@
           <el-card v-if="suggestedGapQueries.length" shadow="never" class="query-card">
             <template #header>
               <div class="intel-card-header">
-                <span>建议补数检索词</span>
-                <el-tag size="small" type="info">{{ suggestedGapQueries.length }} 条</el-tag>
+                <span>{{ t('aiAnalyze.section.suggestedQueries') }}</span>
+                <el-tag size="small" type="info">{{ suggestedGapQueries.length }} {{ t('aiAnalyze.section.referencesCount') }}</el-tag>
               </div>
             </template>
             <div class="query-list">
@@ -177,19 +178,19 @@
         </div>
 
         <div class="section" v-if="result.analysis?.aiNarrative">
-          <h4>AI 深度解读</h4>
+          <h4>{{ t('aiAnalyze.report.narrativeTitle') }}</h4>
           <el-card shadow="never" class="narrative-card">
             <StreamingNarrative :text="result.analysis.aiNarrative" :speed="streamSpeed" :autoplay="true" />
           </el-card>
 
           <div class="ai-meta">
-            <el-tag size="small" type="info">模型：{{ result.analysis?.aiMeta?.modelUsed || '-' }}</el-tag>
+            <el-tag size="small" type="info">{{ t('aiAnalyze.meta.model') }}：{{ result.analysis?.aiMeta?.modelUsed || '-' }}</el-tag>
             <el-tag size="small" :type="result.analysis?.aiMeta?.degraded ? 'warning' : 'success'">
-              {{ result.analysis?.aiMeta?.degraded ? '降级输出' : '实时生成' }}
+              {{ result.analysis?.aiMeta?.degraded ? t('aiAnalyze.meta.degraded') : t('aiAnalyze.meta.realtime') }}
             </el-tag>
-            <el-tag size="small" type="info" v-if="qualityContract">质量分：{{ qualityContract.qualityScore ?? 0 }}</el-tag>
+            <el-tag size="small" type="info" v-if="qualityContract">{{ t('aiAnalyze.meta.qualityScore') }}：{{ qualityContract.qualityScore ?? 0 }}</el-tag>
             <el-tag size="small" :type="mcpHealthTagType" v-if="mcpHealthVisible">
-              MCP 检索：{{ mcpHealth?.usedFallback ? '含回退' : '正常' }}
+              {{ t('aiAnalyze.meta.mcpStatus') }}：{{ mcpHealth?.usedFallback ? t('aiAnalyze.meta.mcpFallback') : t('aiAnalyze.meta.mcpNormal') }}
             </el-tag>
             <el-tag
               v-for="reason in mcpFallbackReasons"
@@ -204,43 +205,45 @@
         </div>
 
         <div class="section" v-if="evidenceCompetitors.length">
-          <h4>竞品证据</h4>
-          <el-table
-            :data="evidenceCompetitors"
-            border
-            stripe
-            size="small"
-            class="data-table"
-            :header-cell-style="{ background: '#fafafa', color: '#606266' }"
-          >
-            <el-table-column type="index" label="#" width="60" />
-            <el-table-column prop="name" label="竞品" min-width="180" />
-            <el-table-column prop="source" label="来源" width="120" />
-            <el-table-column prop="relevanceScore" label="相关度" width="100" />
-            <el-table-column prop="url" label="URL" min-width="220" show-overflow-tooltip />
-          </el-table>
+          <h4>{{ t('aiAnalyze.section.competitorEvidence') }}</h4>
+          <div class="table-scroll-x">
+            <el-table
+              :data="evidenceCompetitors"
+              border
+              stripe
+              size="small"
+              class="data-table"
+              :header-cell-style="{ background: '#fafafa', color: '#606266' }"
+            >
+              <el-table-column type="index" label="#" width="60" />
+              <el-table-column prop="name" :label="t('aiAnalyze.table.competitor')" min-width="180" />
+              <el-table-column prop="source" :label="t('aiAnalyze.table.source')" width="120" />
+              <el-table-column prop="relevanceScore" :label="t('aiAnalyze.table.relevance')" width="100" />
+              <el-table-column prop="url" :label="t('aiAnalyze.table.url')" min-width="220" show-overflow-tooltip />
+            </el-table>
+          </div>
         </div>
 
         <div
           class="section"
           v-if="peerFinancialRows.length || consumerAgeRanges.length || consumerSegments.length || consumerReferences.length"
         >
-          <h4>财报对比与消费者画像</h4>
+          <h4>{{ t('aiAnalyze.section.financeConsumer') }}</h4>
 
           <div class="intel-grid">
             <el-card shadow="never" class="intel-card" v-if="peerFinancialRows.length">
               <template #header>
                 <div class="intel-card-header">
-                  <span>同行财报证据</span>
-                  <el-tag size="small" type="info">{{ peerFinancialRows.length }} 条</el-tag>
+                  <span>{{ t('aiAnalyze.section.peerFinancialEvidence') }}</span>
+                  <el-tag size="small" type="info">{{ peerFinancialRows.length }} {{ t('aiAnalyze.section.referencesCount') }}</el-tag>
                 </div>
               </template>
               <div class="intel-list">
                 <div class="intel-item" v-for="(item, idx) in peerFinancialRows" :key="`peer-fin-${idx}`">
-                  <div class="intel-item-title">{{ item.name || item.title || '未命名财报线索' }}</div>
+                  <div class="intel-item-title">{{ item.name || item.title || t('aiAnalyze.section.peerFinancialEvidence') }}</div>
                   <div class="intel-item-meta">
-                    <span>{{ item.source || 'web' }}</span>
-                    <span>相关度 {{ toSafeNumber(item.relevanceScore, 0).toFixed(2) }}</span>
+                    <span>{{ item.source || t('aiAnalyze.fallback.sourceMcp') }}</span>
+                    <span>{{ t('aiAnalyze.table.relevance') }} {{ toSafeNumber(item.relevanceScore, 0).toFixed(2) }}</span>
                   </div>
                   <el-link
                     v-if="item.url"
@@ -249,9 +252,9 @@
                     :href="item.url"
                     target="_blank"
                     rel="noopener noreferrer"
-                    :underline="false"
+                  :underline="false"
                   >
-                    查看来源
+                    {{ t('aiAnalyze.history.viewResult') }}
                   </el-link>
                 </div>
               </div>
@@ -260,13 +263,13 @@
             <el-card shadow="never" class="intel-card" v-if="consumerAgeRanges.length || consumerSegments.length">
               <template #header>
                 <div class="intel-card-header">
-                  <span>消费者画像</span>
-                  <el-tag size="small" type="success">结构化信号</el-tag>
+                  <span>{{ t('aiAnalyze.section.consumerProfile') }}</span>
+                  <el-tag size="small" type="success">{{ t('aiAnalyze.section.structuredSignals') }}</el-tag>
                 </div>
               </template>
 
               <div class="profile-group" v-if="consumerAgeRanges.length">
-                <div class="profile-title">主要年龄段</div>
+                <div class="profile-title">{{ t('aiAnalyze.section.ageRanges') }}</div>
                 <div class="profile-chip-wrap">
                   <span class="profile-chip" v-for="(item, idx) in consumerAgeRanges" :key="`age-${idx}`">
                     {{ item.range }} <strong>{{ Number(item.count || 0) }}</strong>
@@ -275,7 +278,7 @@
               </div>
 
               <div class="profile-group" v-if="consumerSegments.length">
-                <div class="profile-title">主要消费群体</div>
+                <div class="profile-title">{{ t('aiAnalyze.section.segments') }}</div>
                 <div class="profile-chip-wrap">
                   <span class="profile-chip profile-chip--segment" v-for="(item, idx) in consumerSegments" :key="`segment-${idx}`">
                     {{ item.segment }} <strong>{{ Number(item.count || 0) }}</strong>
@@ -288,14 +291,14 @@
           <el-card shadow="never" class="intel-card intel-card--references" v-if="consumerReferences.length">
             <template #header>
               <div class="intel-card-header">
-                <span>消费者研究证据</span>
-                <el-tag size="small" type="warning">{{ consumerReferences.length }} 条</el-tag>
+                <span>{{ t('aiAnalyze.section.consumerResearchEvidence') }}</span>
+                <el-tag size="small" type="warning">{{ consumerReferences.length }} {{ t('aiAnalyze.section.referencesCount') }}</el-tag>
               </div>
             </template>
             <div class="intel-list">
               <div class="intel-item" v-for="(item, idx) in consumerReferences" :key="`consumer-ref-${idx}`">
-                <div class="intel-item-title">{{ item.name || item.title || '消费者研究线索' }}</div>
-                <div class="intel-item-desc">{{ item.summary || item.description || '无摘要' }}</div>
+                <div class="intel-item-title">{{ item.name || item.title || t('aiAnalyze.section.consumerResearchEvidence') }}</div>
+                <div class="intel-item-desc">{{ item.summary || item.description || t('aiAnalyze.report.summaryEmpty') }}</div>
                 <el-link
                   v-if="item.url"
                   class="intel-link"
@@ -305,7 +308,7 @@
                   rel="noopener noreferrer"
                   :underline="false"
                 >
-                  查看来源
+                  {{ t('aiAnalyze.history.viewResult') }}
                 </el-link>
               </div>
             </div>
@@ -313,14 +316,14 @@
         </div>
 
         <div class="section" v-if="result.analysis?.keyFindings?.length">
-          <h4>关键结论</h4>
+          <h4>{{ t('aiAnalyze.report.keyFindings') }}</h4>
           <ul class="insight-list">
             <li v-for="(item, idx) in result.analysis.keyFindings" :key="idx" class="finding-item">{{ item }}</li>
           </ul>
         </div>
 
         <div class="section" v-if="result.analysis?.suggestions?.length">
-          <h4>建议动作</h4>
+          <h4>{{ t('aiAnalyze.report.suggestions') }}</h4>
           <ul class="insight-list">
             <li v-for="(item, idx) in result.analysis.suggestions" :key="idx" class="suggestion-item">{{ item }}</li>
           </ul>
@@ -332,6 +335,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import request from '../utils/request'
 import MultiDimensionalInsightPanel from '../components/charts/MultiDimensionalInsightPanel.vue'
@@ -362,14 +366,15 @@ const AI_JOB_POLL_INTERVAL_MS = 2000
 const COMPLETED_STATUS_SET = new Set(['completed', 'success', 'done'])
 const FAILED_STATUS_SET = new Set(['failed', 'error', 'aborted', 'cancelled'])
 const RUNNING_STATUS_SET = new Set(['running', 'processing', 'in_progress', 'queued', 'pending'])
-const DATA_GAP_REASON_LABELS: Record<string, string> = {
-  industrySignalsMissing: '行业信号不足',
-  competitorsInsufficient: '竞品样本不足',
-  competitorRelevanceLow: '竞品相关度偏低',
-  marketReferencesMissing: '市场报告证据不足',
-  financialReferencesMissing: '财报与财务证据不足',
-  sourceCoverageWeak: '来源覆盖度偏弱'
+const DATA_GAP_REASON_LABEL_KEYS: Record<string, string> = {
+  industrySignalsMissing: 'aiAnalyze.gapReasons.industrySignalsMissing',
+  competitorsInsufficient: 'aiAnalyze.gapReasons.competitorsInsufficient',
+  competitorRelevanceLow: 'aiAnalyze.gapReasons.competitorRelevanceLow',
+  marketReferencesMissing: 'aiAnalyze.gapReasons.marketReferencesMissing',
+  financialReferencesMissing: 'aiAnalyze.gapReasons.financialReferencesMissing',
+  sourceCoverageWeak: 'aiAnalyze.gapReasons.sourceCoverageWeak'
 }
+const { t, te } = useI18n()
 
 type NormalizedAnalyzeJob = {
   jobId: string
@@ -565,17 +570,17 @@ const activeJobProgress = computed(() => normalizeProgress(activeJob.value?.prog
 
 const jobStatusText = computed(() => {
   const status = normalizeStatus(activeJob.value?.status)
-  if (status === 'pending') return 'Pending'
-  if (status === 'running') return 'Running'
-  if (status === 'completed') return 'Completed'
-  if (status === 'failed') return 'Failed'
-  return String(status || 'Unknown')
+  if (status === 'pending') return t('aiAnalyze.status.pending')
+  if (status === 'running') return t('aiAnalyze.status.running')
+  if (status === 'completed') return t('aiAnalyze.status.completed')
+  if (status === 'failed') return t('aiAnalyze.status.failed')
+  return t('aiAnalyze.status.unknown')
 })
 
 const activeJobStepText = computed(() => {
   if (!activeJob.value) return ''
   const segments = [activeJob.value.step, activeJob.value.message].map((item) => String(item || '').trim()).filter(Boolean)
-  return segments.join(' | ') || 'Background analysis is running.'
+  return segments.join(' | ') || t('aiAnalyze.status.running')
 })
 
 const formatHistoryTime = (value?: string) => {
@@ -604,7 +609,11 @@ const mcpFallbackReasons = computed<string[]>(() => {
     .map((reason: unknown) => String(reason || '').trim())
     .filter(Boolean)
     .slice(0, 3)
-    .map((reason: string) => reasonMap[reason] || reason)
+    .map((reason: string) => {
+      const key = `aiAnalyze.mcpFallbackReasons.${reason}`
+      if (te(key)) return t(key)
+      return reasonMap[reason] || reason
+    })
 })
 
 const evidenceCompetitors = computed<any[]>(() => {
@@ -620,9 +629,9 @@ const evidenceCompetitors = computed<any[]>(() => {
   ]
 
   return fallbackRows
-    .map((item: any, index: number) => ({
-      name: String(item?.name || item?.title || item?.company || `Competitor ${index + 1}`).trim(),
-      source: String(item?.source || item?.channel || 'mcp').trim(),
+    .map((item: any) => ({
+      name: String(item?.name || item?.title || item?.company || '').trim(),
+      source: String(item?.source || item?.channel || t('aiAnalyze.fallback.sourceMcp')).trim(),
       relevanceScore: toSafeNumber(item?.relevanceScore ?? item?.score ?? item?.weight ?? item?.relevance_score, 0),
       url: String(item?.url || '').trim()
     }))
@@ -716,7 +725,11 @@ const dataCoverageSnapshot = computed(() => {
   const dataGapReasons = rawGapReasons
     .map((reason: unknown) => String(reason || '').trim())
     .filter(Boolean)
-    .map((reason: string) => DATA_GAP_REASON_LABELS[reason] || reason)
+    .map((reason: string) => {
+      const key = DATA_GAP_REASON_LABEL_KEYS[reason]
+      if (key && te(key)) return t(key)
+      return reason
+    })
     .slice(0, 6)
 
   const suggestedQueries = Array.isArray(dataCompletenessNode?.suggestedQueries)
@@ -744,24 +757,24 @@ const coverageOverviewCards = computed(() => {
   const snapshot = dataCoverageSnapshot.value
   return [
     {
-      label: '数据完整度',
+      label: t('aiAnalyze.coverage.completeness'),
       value: `${snapshot.completenessScore}%`,
-      note: '来自 dataCompleteness 评估'
+      note: t('aiAnalyze.coverage.completenessNote')
     },
     {
-      label: '来源覆盖',
-      value: `${snapshot.sourceCoverageCount} 个`,
-      note: '竞品来源去重后统计'
+      label: t('aiAnalyze.coverage.sourceCoverage'),
+      value: `${snapshot.sourceCoverageCount} ${t('aiAnalyze.chart.countUnit')}`,
+      note: t('aiAnalyze.coverage.sourceCoverageNote')
     },
     {
-      label: '财报证据',
-      value: `${snapshot.financialReferenceCount + snapshot.peerFinancialCount} 条`,
-      note: '目标与同行财务线索'
+      label: t('aiAnalyze.coverage.financialCoverage'),
+      value: `${snapshot.financialReferenceCount + snapshot.peerFinancialCount} ${t('aiAnalyze.chart.countUnit')}`,
+      note: t('aiAnalyze.coverage.financialCoverageNote')
     },
     {
-      label: '消费者信号',
-      value: `${snapshot.consumerReferenceCount + snapshot.consumerSignalCount} 条`,
-      note: '画像引用与结构化分群'
+      label: t('aiAnalyze.coverage.consumerCoverage'),
+      value: `${snapshot.consumerReferenceCount + snapshot.consumerSignalCount} ${t('aiAnalyze.chart.countUnit')}`,
+      note: t('aiAnalyze.coverage.consumerCoverageNote')
     }
   ]
 })
@@ -774,7 +787,7 @@ const derivedTargetName = computed(() => {
   if (direct) return direct
   const pending = String(activeJob.value?.target || '').trim()
   if (pending) return pending
-  return form.target.trim() || 'Target Enterprise'
+  return form.target.trim() || t('aiAnalyze.form.target')
 })
 
 const insightPanelData = computed(() => {
@@ -782,44 +795,43 @@ const insightPanelData = computed(() => {
   const competitorRows = evidenceCompetitors.value
   const coverage = dataCoverageSnapshot.value
 
-  const qualityScore = clampPercent(analysis?.qualityContract?.qualityScore, 70)
+  const qualityScore = clampPercent(analysis?.qualityContract?.qualityScore, 0)
   const completenessScore = coverage.completenessScore
-  const sourceCoverageScore = clampPercent(coverage.sourceCoverageCount * 24, 40)
+  const sourceCoverageScore = clampPercent(coverage.sourceCoverageCount * 25, 0)
   const financialSignalScore = clampPercent(
     coverage.financialReferenceCount * 12 + coverage.peerFinancialCount * 10,
-    36
+    0
   )
   const consumerSignalScore = clampPercent(
     coverage.consumerReferenceCount * 10 + coverage.consumerSignalCount * 8,
-    34
+    0
   )
-  const mcpScore = clampPercent(
-    86 + Math.min(8, coverage.sourceCoverageCount * 2) - (mcpHealth.value?.usedFallback ? 24 : 0),
-    62
-  )
-  const findingsScore = clampPercent(Array.isArray(analysis?.keyFindings) ? analysis.keyFindings.length * 18 : 0, 58)
-  const suggestionsScore = clampPercent(Array.isArray(analysis?.suggestions) ? analysis.suggestions.length * 18 : 0, 60)
+  const mcpScoreBase = coverage.sourceCoverageCount > 0 ? clampPercent((coverage.sourceCoverageCount / 4) * 100, 0) : 0
+  const mcpScore = mcpHealth.value?.usedFallback ? Math.max(0, mcpScoreBase - 20) : mcpScoreBase
+  const findingsScore = clampPercent(Array.isArray(analysis?.keyFindings) ? analysis.keyFindings.length * 18 : 0, 0)
+  const suggestionsScore = clampPercent(Array.isArray(analysis?.suggestions) ? analysis.suggestions.length * 18 : 0, 0)
 
   const trendBase = [
-    clampPercent(completenessScore * 0.7 + sourceCoverageScore * 0.3, 56),
-    clampPercent(completenessScore * 0.65 + financialSignalScore * 0.35, 60),
-    clampPercent(qualityScore * 0.7 + findingsScore * 0.3, 64),
-    clampPercent(qualityScore * 0.7 + suggestionsScore * 0.3, 68),
-    clampPercent((qualityScore + completenessScore + mcpScore) / 3, 70)
+    clampPercent(completenessScore * 0.7 + sourceCoverageScore * 0.3, 0),
+    clampPercent(completenessScore * 0.65 + financialSignalScore * 0.35, 0),
+    clampPercent(qualityScore * 0.7 + findingsScore * 0.3, 0),
+    clampPercent(qualityScore * 0.7 + suggestionsScore * 0.3, 0),
+    clampPercent((qualityScore + completenessScore + mcpScore) / 3, 0)
   ]
 
   const topCompetitors: CompetitorScore[] = competitorRows
-    .map((item: any, index: number) => ({
-      name: String(item?.name || item?.company || `Competitor ${index + 1}`).trim() || `Competitor ${index + 1}`,
+    .map((item: any) => ({
+      name: String(item?.name || item?.company || '').trim(),
       score: toSafeNumber(item?.relevanceScore ?? item?.score ?? item?.weight, 0)
     }))
+    .filter((item: CompetitorScore) => Boolean(item.name))
     .slice(0, 6)
 
   const fallbackEvidenceBars = [
-    { name: '市场证据', value: coverage.marketReferenceCount },
-    { name: '财报证据', value: coverage.financialReferenceCount + coverage.peerFinancialCount },
-    { name: '消费证据', value: coverage.consumerReferenceCount },
-    { name: '竞品信号', value: coverage.competitorSignalCount }
+    { name: t('aiAnalyze.chart.marketEvidence'), value: coverage.marketReferenceCount },
+    { name: t('aiAnalyze.chart.financialEvidence'), value: coverage.financialReferenceCount + coverage.peerFinancialCount },
+    { name: t('aiAnalyze.chart.consumerEvidence'), value: coverage.consumerReferenceCount },
+    { name: t('aiAnalyze.chart.competitorSignals'), value: coverage.competitorSignalCount }
   ]
   const barCategories = topCompetitors.length
     ? topCompetitors.map((item: CompetitorScore) => item.name)
@@ -827,54 +839,69 @@ const insightPanelData = computed(() => {
   const barValues = topCompetitors.length
     ? topCompetitors.map((item: CompetitorScore) => Number(item.score.toFixed(2)))
     : fallbackEvidenceBars.map((item) => Number(item.value.toFixed(2)))
-  const barSeriesName = topCompetitors.length ? 'Competitor Relevance' : 'Evidence Coverage'
-  const barUnit = topCompetitors.length ? 'score' : 'count'
+  const barSeriesName = topCompetitors.length ? t('aiAnalyze.chart.competitorRelevance') : t('aiAnalyze.chart.evidenceCoverage')
+  const barUnit = topCompetitors.length ? t('aiAnalyze.chart.scoreUnit') : t('aiAnalyze.chart.countUnit')
 
-  const graphNodes = [
-    { id: 'target', name: derivedTargetName.value, category: 0, symbolSize: 62, value: 100 }
-  ]
+  const targetNodeValue = clampPercent((qualityScore + completenessScore + sourceCoverageScore) / 3, 0)
+  const graphNodes: Array<{ id: string; name: string; category: number; symbolSize: number; value: number }> = []
   const graphLinks: Array<{ source: string; target: string; value: number }> = []
 
-  topCompetitors.forEach((item: CompetitorScore, index: number) => {
-    const nodeId = `competitor-${index}`
+  if (topCompetitors.length) {
     graphNodes.push({
-      id: nodeId,
-      name: item.name,
-      category: 1,
-      symbolSize: Math.max(32, Math.min(48, 30 + item.score / 3)),
-      value: item.score
+      id: 'target',
+      name: derivedTargetName.value,
+      category: 0,
+      symbolSize: Math.max(36, Math.min(62, 32 + targetNodeValue / 3)),
+      value: targetNodeValue
     })
-    graphLinks.push({
-      source: 'target',
-      target: nodeId,
-      value: Number(item.score.toFixed(2))
+    topCompetitors.forEach((item: CompetitorScore, index: number) => {
+      const nodeId = `competitor-${index}`
+      graphNodes.push({
+        id: nodeId,
+        name: item.name,
+        category: 1,
+        symbolSize: Math.max(32, Math.min(48, 30 + item.score / 3)),
+        value: item.score
+      })
+      graphLinks.push({
+        source: 'target',
+        target: nodeId,
+        value: Number(item.score.toFixed(2))
+      })
     })
-  })
-
-  if (!topCompetitors.length) {
+  } else {
     const fallbackNodes = [
       {
         id: 'evidence-market',
-        name: `市场(${coverage.marketReferenceCount})`,
+        name: `${t('aiAnalyze.chart.marketNode')}(${coverage.marketReferenceCount})`,
         category: 2,
         symbolSize: 36,
         value: coverage.marketReferenceCount
       },
       {
         id: 'evidence-financial',
-        name: `财报(${coverage.financialReferenceCount + coverage.peerFinancialCount})`,
+        name: `${t('aiAnalyze.chart.financialNode')}(${coverage.financialReferenceCount + coverage.peerFinancialCount})`,
         category: 2,
         symbolSize: 38,
         value: coverage.financialReferenceCount + coverage.peerFinancialCount
       },
       {
         id: 'evidence-consumer',
-        name: `消费(${coverage.consumerReferenceCount + coverage.consumerSignalCount})`,
+        name: `${t('aiAnalyze.chart.consumerNode')}(${coverage.consumerReferenceCount + coverage.consumerSignalCount})`,
         category: 2,
         symbolSize: 34,
         value: coverage.consumerReferenceCount + coverage.consumerSignalCount
       }
-    ]
+    ].filter((node) => node.value > 0)
+    if (fallbackNodes.length > 0) {
+      graphNodes.push({
+        id: 'target',
+        name: derivedTargetName.value,
+        category: 0,
+        symbolSize: Math.max(36, Math.min(62, 32 + targetNodeValue / 3)),
+        value: targetNodeValue
+      })
+    }
     fallbackNodes.forEach((node) => {
       graphNodes.push(node)
       graphLinks.push({ source: 'target', target: node.id, value: Number((node.value || 0).toFixed(2)) })
@@ -884,20 +911,26 @@ const insightPanelData = computed(() => {
   return {
     radar: {
       indicators: [
-        { name: 'Quality', max: 100 },
-        { name: 'Data Coverage', max: 100 },
-        { name: 'Source Coverage', max: 100 },
-        { name: 'Financial Signals', max: 100 },
-        { name: 'Consumer Signals', max: 100 }
+        { name: t('aiAnalyze.panel.radarQuality'), max: 100 },
+        { name: t('aiAnalyze.panel.radarCoverage'), max: 100 },
+        { name: t('aiAnalyze.panel.radarSourceCoverage'), max: 100 },
+        { name: t('aiAnalyze.panel.radarFinancialSignals'), max: 100 },
+        { name: t('aiAnalyze.panel.radarConsumerSignals'), max: 100 }
       ],
       values: [qualityScore, completenessScore, sourceCoverageScore, financialSignalScore, consumerSignalScore],
-      seriesName: 'AI Insight Quality'
+      seriesName: t('aiAnalyze.panel.radarSeries')
     },
     line: {
-      categories: ['Signal', 'Model', 'Narrative', 'Action', 'Final'],
+      categories: [
+        t('aiAnalyze.panel.lineSignal'),
+        t('aiAnalyze.panel.lineModel'),
+        t('aiAnalyze.panel.lineNarrative'),
+        t('aiAnalyze.panel.lineAction'),
+        t('aiAnalyze.panel.lineFinal')
+      ],
       values: trendBase,
-      seriesName: 'Pipeline Momentum',
-      unit: 'score'
+      seriesName: t('aiAnalyze.panel.lineSeries'),
+      unit: t('aiAnalyze.panel.lineUnit')
     },
     bar: {
       categories: barCategories,
@@ -907,13 +940,13 @@ const insightPanelData = computed(() => {
     },
     graph: {
       categories: [
-        { name: 'Target' },
-        { name: 'Competitor' },
-        { name: 'System' }
+        { name: t('aiAnalyze.panel.graphCategoryTarget') },
+        { name: t('aiAnalyze.panel.graphCategoryCompetitor') },
+        { name: t('aiAnalyze.panel.graphCategorySignal') }
       ],
       nodes: graphNodes,
       links: graphLinks,
-      seriesName: 'Competitive Network'
+      seriesName: t('aiAnalyze.panel.graphSeries')
     }
   }
 })
@@ -945,7 +978,7 @@ const fetchJobResult = async (jobId: string, silentError = false) => {
   } catch (err: any) {
     if (!silentError) {
       const backendMessage = err?.response?.data?.message || err?.response?.data?.error
-      ElMessage.error(backendMessage || '加载历史分析结果失败')
+      ElMessage.error(backendMessage || t('aiAnalyze.toasts.loadHistoryResultFailed'))
     }
   }
   return null
@@ -968,7 +1001,7 @@ const applyJobState = async (job: NormalizedAnalyzeJob, options: { fromPolling?:
     clearPersistedPendingJob()
     analysisStore.clearPendingJob()
     if (options.fromPolling) {
-      ElMessage.success('AI 分析已完成')
+      ElMessage.success(t('aiAnalyze.toasts.completed'))
     }
     stopPolling()
     return
@@ -978,7 +1011,7 @@ const applyJobState = async (job: NormalizedAnalyzeJob, options: { fromPolling?:
     clearPersistedPendingJob()
     analysisStore.clearPendingJob()
     stopPolling()
-    ElMessage.error(job.message || 'AI 分析任务执行失败')
+    ElMessage.error(job.message || t('aiAnalyze.toasts.failed'))
   }
 }
 
@@ -993,7 +1026,7 @@ const fetchJobStatus = async (jobId: string, options: { silent?: boolean } = {})
   } catch (err: any) {
     if (!options.silent) {
       const backendMessage = err?.response?.data?.message || err?.response?.data?.error
-      ElMessage.error(backendMessage || '查询分析进度失败')
+      ElMessage.error(backendMessage || t('aiAnalyze.toasts.pollFailed'))
     }
   } finally {
     pollingRequestPending.value = false
@@ -1036,7 +1069,7 @@ const loadHistory = async () => {
     analysisStore.setHistory(rows)
   } catch (err: any) {
     const backendMessage = err?.response?.data?.message || err?.response?.data?.error
-    ElMessage.error(backendMessage || '加载历史分析记录失败')
+    ElMessage.error(backendMessage || t('aiAnalyze.toasts.loadHistoryFailed'))
   } finally {
     historyLoading.value = false
   }
@@ -1073,7 +1106,7 @@ const restorePendingJob = async () => {
     status: 'running',
     progress: 0,
     step: '',
-    message: 'Resuming analysis progress...',
+    message: t('aiAnalyze.status.running'),
     createdAt: '',
     updatedAt: '',
     completedAt: ''
@@ -1096,7 +1129,7 @@ const startAnalyzeJob = async (target: string) => {
 const runAnalyze = async () => {
   const target = form.target.trim()
   if (!target) {
-    ElMessage.warning('请先填写 AI 分析对象')
+    ElMessage.warning(t('aiAnalyze.toasts.inputRequired'))
     return
   }
 
@@ -1104,10 +1137,10 @@ const runAnalyze = async () => {
   try {
     await startAnalyzeJob(target)
     await loadHistory()
-    ElMessage.success('分析任务已提交，后台正在持续执行')
+    ElMessage.success(t('aiAnalyze.toasts.submitSuccess'))
   } catch (err: any) {
     const backendMessage = err?.response?.data?.message || err?.response?.data?.error
-    ElMessage.error(backendMessage || err?.message || '提交分析任务失败')
+    ElMessage.error(backendMessage || err?.message || t('aiAnalyze.toasts.submitFailed'))
   } finally {
     loading.value = false
   }
@@ -1131,6 +1164,7 @@ onUnmounted(() => {
 .content-shell {
   max-width: 1280px;
   margin: 0 auto;
+  overflow-x: hidden;
 }
 
 .header-row {
@@ -1252,6 +1286,16 @@ onUnmounted(() => {
 
 .history-action:disabled {
   cursor: not-allowed;
+}
+
+.table-scroll-x {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.data-table {
+  min-width: 760px;
 }
 
 .summary-banner {
@@ -1593,6 +1637,10 @@ onUnmounted(() => {
 
   .pipeline-arrow {
     display: none;
+  }
+
+  .data-table {
+    min-width: 640px;
   }
 
   .intel-item {

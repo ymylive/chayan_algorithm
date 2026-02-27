@@ -13,11 +13,12 @@ const readFallbackReasonMap = () => {
 }
 
 describe('AIAnalyze quality dashboard contract', () => {
-  test('renders async progress and history sections for resumable jobs', () => {
+  test('renders async progress/history sections with i18n keys for resumable jobs', () => {
     const source = readView()
 
-    expect(source).toContain('实时分析进度')
-    expect(source).toContain('历史分析记录')
+    expect(source).toContain("t('aiAnalyze.progress.title')")
+    expect(source).toContain("t('aiAnalyze.history.title')")
+    expect(source).toContain('useI18n')
     expect(source).toContain('activeJobProgress')
     expect(source).toContain('historyRows')
     expect(source).toContain('openHistoryResult')

@@ -797,9 +797,6 @@ class AIService {
     if (Number.isFinite(Number(override.maxTokens))) {
       normalized.maxTokens = Number(override.maxTokens);
     }
-    if (typeof override.useMock === 'boolean') {
-      normalized.useMock = override.useMock;
-    }
     if (override.qualityContractEnabled !== undefined) {
       normalized.qualityContractEnabled = toBoolean(override.qualityContractEnabled, true);
     }
@@ -832,7 +829,7 @@ class AIService {
     const title = process.env.AI_X_TITLE || '';
     const temperature = Number(process.env.AI_TEMPERATURE || persisted.temperature || 0.35);
     const maxTokens = Number(process.env.AI_MAX_TOKENS || persisted.maxTokens || 1400);
-    const useMock = toBoolean(process.env.AI_USE_MOCK, toBoolean(persisted.useMock, false));
+    const useMock = false;
     const aiRequestTimeoutMs = parsePositiveInt(process.env.AI_REQUEST_TIMEOUT_MS, 85000, 180000);
     const aiNarrativeTotalTimeoutMs = parsePositiveInt(process.env.AI_NARRATIVE_TOTAL_TIMEOUT_MS, 110000, 300000);
     const mcpToolTimeoutMs = parsePositiveInt(process.env.MCP_TOOL_TIMEOUT_MS, 12000, 240000);
@@ -3065,7 +3062,7 @@ class AIService {
 
     const maxCandidates = parsePositiveInt(options?.maxCandidates, 6, 12);
     const config = this.getAIConfig(options?.configOverride || null);
-    if (config.useMock || !config.apiKey || !config.baseURL) {
+    if (!config.apiKey || !config.baseURL) {
       return [];
     }
 
@@ -3131,7 +3128,7 @@ class AIService {
     }
 
     const client = await this.connectMCP();
-    const useMockFallback = toBoolean(process.env.AI_MCP_USE_MOCK_FALLBACK, this.getAIConfig().useMock);
+    const useMockFallback = false;
     const buildFallbackPayload = (reason) => {
       if (useMockFallback) {
         return mockFn(args);

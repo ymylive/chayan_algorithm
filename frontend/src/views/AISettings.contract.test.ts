@@ -1,4 +1,4 @@
-import fs from 'node:fs'
+﻿import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, test } from 'vitest'
 
@@ -31,13 +31,14 @@ describe('AISettings view contract', () => {
     expect(source).toContain('tertiaryModel: form.tertiaryModel')
   })
 
-  test('preserves masked secret behavior and explicit validation messages', () => {
+  test('preserves masked secret behavior and i18n-driven validation messages', () => {
     const source = readView()
 
     expect(source).toContain("if (form.apiKey) {")
     expect(source).toContain("form.apiKey = '********'")
-    expect(source).toContain('Failed to load AI settings, using defaults')
-    expect(source).toContain('请先填写 AI API 地址')
-    expect(source).toContain('请先填写主模型名称')
+    expect(source).toContain('useI18n')
+    expect(source).toContain("t('aiSettings.toasts.loadFailed')")
+    expect(source).toContain("t('aiSettings.validate.modelRequired')")
+    expect(source).toContain("t('aiSettings.validate.protocolInvalid')")
   })
 })

@@ -24,6 +24,8 @@ describe('router', () => {
 
     expect(routeMap.get('/login')?.meta.requiresAuth).toBe(false)
     expect(routeMap.get('/register')?.meta.requiresAuth).toBe(false)
+    expect(routeMap.get('/login')?.meta.titleKey).toBe('nav.login')
+    expect(routeMap.get('/analysis')?.meta.titleKey).toBe('nav.analysis')
 
     const protectedPaths = ['/', '/upload', '/analysis', '/recommendations', '/ai-analyze', '/ai-settings']
     for (const path of protectedPaths) {

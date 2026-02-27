@@ -7,14 +7,14 @@
       'is-mobile-open': props.isMobile && props.mobileOpen
     }"
     :style="sidebarStyle"
-    aria-label="Primary navigation"
+    :aria-label="t('layout.primaryNavigation')"
   >
     <div class="sidebar-brand">
       <span class="brand-mark" aria-hidden="true" />
       <span v-if="!props.collapsed || props.isMobile" class="brand-text">{{ props.appName }}</span>
     </div>
 
-    <nav class="sidebar-nav" aria-label="Main">
+    <nav class="sidebar-nav" :aria-label="t('layout.mainNavigation')">
       <RouterLink
         v-for="item in menuItems"
         :key="item.path"
@@ -24,7 +24,7 @@
         @click="handleNavigate(item.path)"
       >
         <span class="nav-bullet" aria-hidden="true" />
-        <span v-if="!props.collapsed || props.isMobile" class="nav-label">{{ item.label }}</span>
+        <span v-if="!props.collapsed || props.isMobile" class="nav-label">{{ t(item.labelKey) }}</span>
       </RouterLink>
     </nav>
 
@@ -32,11 +32,11 @@
       <button
         type="button"
         class="collapse-toggle"
-        :aria-label="props.collapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+        :aria-label="props.collapsed ? t('layout.expandSidebar') : t('layout.collapseSidebar')"
         @click="emit('toggle-collapse')"
       >
         <span class="toggle-icon" aria-hidden="true">{{ props.collapsed ? '>' : '<' }}</span>
-        <span v-if="!props.collapsed" class="toggle-label">Collapse</span>
+        <span v-if="!props.collapsed" class="toggle-label">{{ t('nav.collapse') }}</span>
       </button>
     </div>
   </aside>
@@ -46,7 +46,7 @@
       v-if="props.isMobile && props.mobileOpen"
       class="sidebar-mask"
       type="button"
-      aria-label="Close navigation menu"
+      :aria-label="t('layout.closeNavigationMenu')"
       @click="closeMobileMenu"
     />
   </Transition>
@@ -54,11 +54,12 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { RouterLink, useRoute } from 'vue-router'
 
 interface SidebarMenuItem {
   path: string
-  label: string
+  labelKey: string
 }
 
 const props = withDefaults(
@@ -88,16 +89,17 @@ const emit = defineEmits<{
   (e: 'toggle-collapse'): void
 }>()
 
+const { t } = useI18n()
 const route = useRoute()
 
 const menuItems: SidebarMenuItem[] = [
-  { path: '/', label: 'Overview' },
-  { path: '/upload', label: 'Upload' },
-  { path: '/analysis', label: 'Analysis' },
-  { path: '/recommendations', label: 'Recommendations' },
-  { path: '/ai-analyze', label: 'AI Analyze' },
-  { path: '/ai-settings', label: 'AI Settings' },
-  { path: '/deep-research', label: 'Deep Research' }
+  { path: '/', labelKey: 'nav.overview' },
+  { path: '/upload', labelKey: 'nav.upload' },
+  { path: '/analysis', labelKey: 'nav.analysis' },
+  { path: '/recommendations', labelKey: 'nav.recommendations' },
+  { path: '/ai-analyze', labelKey: 'nav.aiAnalyze' },
+  { path: '/ai-settings', labelKey: 'nav.aiSettings' },
+  { path: '/deep-research', labelKey: 'nav.deepResearch' }
 ]
 
 const sidebarStyle = computed(() => {

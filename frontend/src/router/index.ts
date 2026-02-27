@@ -33,15 +33,15 @@ const bootstrapSession = async () => {
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/login', component: () => import('../views/Login.vue'), meta: { requiresAuth: false } },
-    { path: '/register', component: () => import('../views/Register.vue'), meta: { requiresAuth: false } },
-    { path: '/', component: () => import('../views/Home.vue'), meta: { requiresAuth: true } },
-    { path: '/upload', component: () => import('../views/Upload.vue'), meta: { requiresAuth: true } },
-    { path: '/analysis', component: () => import('../views/Analysis.vue'), meta: { requiresAuth: true } },
-    { path: '/recommendations', component: () => import('../views/Recommendations.vue'), meta: { requiresAuth: true } },
-    { path: '/ai-analyze', component: () => import('../views/AIAnalyze.vue'), meta: { requiresAuth: true } },
-    { path: '/ai-settings', component: () => import('../views/AISettings.vue'), meta: { requiresAuth: true } },
-    { path: '/deep-research', component: () => import('../views/DeepResearch.vue'), meta: { requiresAuth: true } }
+    { path: '/login', component: () => import('../views/Login.vue'), meta: { requiresAuth: false, titleKey: 'nav.login' } },
+    { path: '/register', component: () => import('../views/Register.vue'), meta: { requiresAuth: false, titleKey: 'nav.register' } },
+    { path: '/', component: () => import('../views/Home.vue'), meta: { requiresAuth: true, titleKey: 'nav.overview' } },
+    { path: '/upload', component: () => import('../views/Upload.vue'), meta: { requiresAuth: true, titleKey: 'nav.upload' } },
+    { path: '/analysis', component: () => import('../views/Analysis.vue'), meta: { requiresAuth: true, titleKey: 'nav.analysis' } },
+    { path: '/recommendations', component: () => import('../views/Recommendations.vue'), meta: { requiresAuth: true, titleKey: 'nav.recommendations' } },
+    { path: '/ai-analyze', component: () => import('../views/AIAnalyze.vue'), meta: { requiresAuth: true, titleKey: 'nav.aiAnalyze' } },
+    { path: '/ai-settings', component: () => import('../views/AISettings.vue'), meta: { requiresAuth: true, titleKey: 'nav.aiSettings' } },
+    { path: '/deep-research', component: () => import('../views/DeepResearch.vue'), meta: { requiresAuth: true, titleKey: 'nav.deepResearch' } }
   ]
 })
 

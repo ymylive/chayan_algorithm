@@ -16,14 +16,15 @@
         autoresize
         :style="{ height: `${chartHeight}px` }"
       />
-      <div v-else-if="loading" class="chart-loading" aria-live="polite">Loading chart...</div>
-      <div v-else class="chart-empty" aria-live="polite">No chart data available</div>
+      <div v-else-if="loading" class="chart-loading" aria-live="polite">{{ t('chart.loading') }}</div>
+      <div v-else class="chart-empty" aria-live="polite">{{ t('chart.empty') }}</div>
     </div>
   </article>
 </template>
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { EChartsOption } from 'echarts';
 import VChart from 'vue-echarts';
 import { getResponsiveChartHeight, type InsightChartType } from '../../utils/chartFactory';
@@ -44,16 +45,10 @@ const props = withDefaults(
   },
 );
 
-const CHART_TYPE_LABELS: Record<InsightChartType, string> = {
-  radar: 'Radar',
-  line: 'Line',
-  bar: 'Bar',
-  graph: 'Graph',
-};
-
 const viewportWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1280);
+const { t } = useI18n();
 
-const chartTypeLabel = computed(() => CHART_TYPE_LABELS[props.type]);
+const chartTypeLabel = computed(() => t(`chart.type.${props.type}`));
 const chartHeight = computed(() => Math.max(props.minHeight, getResponsiveChartHeight(viewportWidth.value)));
 const hasRenderableOption = computed(() => {
   const option = props.option as any;
@@ -67,10 +62,21 @@ const hasRenderableOption = computed(() => {
   return seriesList.some((series: unknown) => {
     if (!series || typeof series !== 'object') return false;
     const seriesObject = series as Record<string, unknown>;
+    const seriesType = String(seriesObject.type || '').trim().toLowerCase();
     const data = Array.isArray(seriesObject.data) ? seriesObject.data : [];
     const links = Array.isArray(seriesObject.links) ? seriesObject.links : [];
     const nodes = Array.isArray(seriesObject.nodes) ? seriesObject.nodes : [];
-    return data.length > 0 || links.length > 0 || nodes.length > 0;
+    if (seriesType === 'graph') {
+      return nodes.length > 0 && links.length > 0;
+    }
+    if (seriesType === 'radar') {
+      return data.some((item) => {
+        if (!item || typeof item !== 'object') return false;
+        const value = (item as Record<string, unknown>).value;
+        return Array.isArray(value) && value.length > 0;
+      });
+    }
+    return data.length > 0;
   });
 });
 

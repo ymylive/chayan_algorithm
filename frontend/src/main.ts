@@ -19,6 +19,7 @@ import {
 import { UniversalTransition } from 'echarts/features'
 import App from './App.vue'
 import router from './router'
+import { i18n } from './i18n'
 import './style.css'
 
 use([
@@ -48,4 +49,4 @@ for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
   app.component(key, component)
 }
 
-app.use(createPinia()).use(router).use(ElementPlus).mount('#app')
+app.use(createPinia()).use(router).use(i18n).use(ElementPlus).mount('#app')

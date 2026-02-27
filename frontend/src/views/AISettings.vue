@@ -1,54 +1,60 @@
-<template>
+﻿<template>
   <div class="ai-settings-page">
     <div class="content-shell">
       <div class="section-title">
         <el-icon><Setting /></el-icon>
-        <span>AI 配置中心</span>
+        <span>{{ t('aiSettings.header.title') }}</span>
       </div>
 
       <el-card class="settings-card">
         <el-form label-width="140px" :model="form" class="settings-form">
           <div class="group-grid">
             <div class="settings-group">
-              <div class="group-title">主服务配置</div>
-              <el-form-item label="AI API 地址">
-                <el-input v-model="form.apiEndpoint" placeholder="https://gmn.chuangzuoli.com/v1" clearable />
+              <div class="group-title">{{ t('aiSettings.groups.primary') }}</div>
+
+              <el-form-item :label="t('aiSettings.field.apiEndpoint')">
+                <el-input v-model="form.apiEndpoint" :placeholder="t('aiSettings.placeholder.apiEndpoint')" clearable />
               </el-form-item>
 
-              <el-form-item label="API Key">
+              <el-form-item :label="t('aiSettings.field.apiKey')">
                 <el-input
                   v-model="form.apiKey"
                   type="password"
                   show-password
-                  placeholder="请输入 API Key（留空则保持现有）"
+                  :placeholder="t('aiSettings.placeholder.apiKey')"
                   clearable
                 />
               </el-form-item>
 
-              <el-form-item label="主模型">
-                <el-input v-model="form.model" placeholder="gpt-5.2" clearable />
+              <el-form-item :label="t('aiSettings.field.model')">
+                <el-input v-model="form.model" :placeholder="t('aiSettings.placeholder.model')" clearable />
               </el-form-item>
 
-              <el-form-item label="协议类型">
-                <el-select v-model="form.protocol" class="full-width" placeholder="请选择协议">
-                  <el-option label="OpenAI Responses" value="responses" />
-                  <el-option label="兼容协议 (OpenAI Completions)" value="chat_completions" />
+              <el-form-item :label="t('aiSettings.field.protocol')">
+                <el-select v-model="form.protocol" class="full-width" :placeholder="t('aiSettings.placeholder.selectProtocol')">
+                  <el-option
+                    v-for="item in protocolOptions"
+                    :key="item.value"
+                    :label="item.label"
+                    :value="item.value"
+                  />
                 </el-select>
               </el-form-item>
             </div>
 
             <div class="settings-group">
-              <div class="group-title">回退链配置</div>
-              <el-form-item label="单模型回退">
-                <el-input v-model="form.fallbackModel" placeholder="可选：当主模型失败时使用" clearable />
+              <div class="group-title">{{ t('aiSettings.groups.fallback') }}</div>
+
+              <el-form-item :label="t('aiSettings.field.fallbackModel')">
+                <el-input v-model="form.fallbackModel" :placeholder="t('aiSettings.placeholder.fallbackModel')" clearable />
               </el-form-item>
 
-              <el-form-item label="模型回退链">
+              <el-form-item :label="t('aiSettings.field.modelFallbacks')">
                 <el-input
                   v-model="form.modelFallbacks"
                   type="textarea"
                   :rows="3"
-                  placeholder="逗号分隔，例如 model/a, model/b"
+                  :placeholder="t('aiSettings.placeholder.modelFallbacks')"
                 />
               </el-form-item>
             </div>
@@ -56,106 +62,115 @@
 
           <div class="group-grid">
             <div class="settings-group">
-              <div class="group-title">次级服务（可选）</div>
-              <el-form-item label="次级 API 地址">
-                <el-input v-model="form.secondaryApiEndpoint" placeholder="https://api-inference.modelscope.cn/v1" clearable />
+              <div class="group-title">{{ t('aiSettings.groups.secondary') }}</div>
+
+              <el-form-item :label="t('aiSettings.field.secondaryApiEndpoint')">
+                <el-input v-model="form.secondaryApiEndpoint" :placeholder="t('aiSettings.placeholder.secondaryApiEndpoint')" clearable />
               </el-form-item>
 
-              <el-form-item label="次级协议">
-                <el-select v-model="form.secondaryProtocol" class="full-width" placeholder="请选择协议">
-                  <el-option label="OpenAI Responses" value="responses" />
-                  <el-option label="兼容协议 (OpenAI Completions)" value="chat_completions" />
+              <el-form-item :label="t('aiSettings.field.secondaryProtocol')">
+                <el-select v-model="form.secondaryProtocol" class="full-width" :placeholder="t('aiSettings.placeholder.selectProtocol')">
+                  <el-option
+                    v-for="item in protocolOptions"
+                    :key="`secondary-${item.value}`"
+                    :label="item.label"
+                    :value="item.value"
+                  />
                 </el-select>
               </el-form-item>
 
-              <el-form-item label="次级 API Key">
+              <el-form-item :label="t('aiSettings.field.secondaryApiKey')">
                 <el-input
                   v-model="form.secondaryApiKey"
                   type="password"
                   show-password
-                  placeholder="请输入次级 API Key（留空则保持现有）"
+                  :placeholder="t('aiSettings.placeholder.secondaryApiKey')"
                   clearable
                 />
               </el-form-item>
 
-              <el-form-item label="次级模型">
-                <el-input v-model="form.secondaryModel" placeholder="ZhipuAI/GLM-5" clearable />
+              <el-form-item :label="t('aiSettings.field.secondaryModel')">
+                <el-input v-model="form.secondaryModel" :placeholder="t('aiSettings.placeholder.secondaryModel')" clearable />
               </el-form-item>
             </div>
 
             <div class="settings-group">
-              <div class="group-title">第三级服务（可选）</div>
-              <el-form-item label="三级 API 地址">
-                <el-input v-model="form.tertiaryApiEndpoint" placeholder="https://openrouter.ai/api/v1" clearable />
+              <div class="group-title">{{ t('aiSettings.groups.tertiary') }}</div>
+
+              <el-form-item :label="t('aiSettings.field.tertiaryApiEndpoint')">
+                <el-input v-model="form.tertiaryApiEndpoint" :placeholder="t('aiSettings.placeholder.tertiaryApiEndpoint')" clearable />
               </el-form-item>
 
-              <el-form-item label="三级协议">
-                <el-select v-model="form.tertiaryProtocol" class="full-width" placeholder="请选择协议">
-                  <el-option label="OpenAI Responses" value="responses" />
-                  <el-option label="兼容协议 (OpenAI Completions)" value="chat_completions" />
+              <el-form-item :label="t('aiSettings.field.tertiaryProtocol')">
+                <el-select v-model="form.tertiaryProtocol" class="full-width" :placeholder="t('aiSettings.placeholder.selectProtocol')">
+                  <el-option
+                    v-for="item in protocolOptions"
+                    :key="`tertiary-${item.value}`"
+                    :label="item.label"
+                    :value="item.value"
+                  />
                 </el-select>
               </el-form-item>
 
-              <el-form-item label="三级 API Key">
+              <el-form-item :label="t('aiSettings.field.tertiaryApiKey')">
                 <el-input
                   v-model="form.tertiaryApiKey"
                   type="password"
                   show-password
-                  placeholder="请输入三级 API Key（留空则保持现有）"
+                  :placeholder="t('aiSettings.placeholder.tertiaryApiKey')"
                   clearable
                 />
               </el-form-item>
 
-              <el-form-item label="三级模型">
-                <el-input v-model="form.tertiaryModel" placeholder="deepseek/deepseek-r1-0528:free" clearable />
+              <el-form-item :label="t('aiSettings.field.tertiaryModel')">
+                <el-input v-model="form.tertiaryModel" :placeholder="t('aiSettings.placeholder.tertiaryModel')" clearable />
               </el-form-item>
             </div>
 
             <div class="settings-group">
-              <div class="group-title">模型参数</div>
-              <el-form-item label="温度 Temperature">
+              <div class="group-title">{{ t('aiSettings.groups.model') }}</div>
+
+              <el-form-item :label="t('aiSettings.field.temperature')">
                 <div class="slider-row">
                   <el-slider
                     v-model="form.temperature"
                     :min="0"
                     :max="2"
                     :step="0.1"
-                    :marks="{ 0: '保守', 1: '平衡', 2: '创造' }"
+                    :marks="temperatureMarks"
                   />
                   <span class="slider-value">{{ form.temperature.toFixed(1) }}</span>
                 </div>
               </el-form-item>
 
-              <el-form-item label="最大 Tokens">
+              <el-form-item :label="t('aiSettings.field.maxTokens')">
                 <el-input-number v-model="form.maxTokens" :min="64" :max="8192" :step="64" />
-              </el-form-item>
-
-              <el-form-item label="启用 Mock">
-                <el-switch v-model="form.useMock" />
               </el-form-item>
             </div>
           </div>
 
           <el-form-item class="action-row">
-            <el-button type="primary" @click="saveSettings">保存设置</el-button>
-            <el-button plain @click="resetSettings">恢复默认</el-button>
+            <el-button type="primary" @click="saveSettings">{{ t('aiSettings.actions.save') }}</el-button>
+            <el-button plain @click="resetSettings">{{ t('aiSettings.actions.reset') }}</el-button>
           </el-form-item>
         </el-form>
 
-        <div class="help-tip">配置将按当前登录用户单独保存，密钥字段保存后会重新掩码显示</div>
+        <div class="help-tip">{{ t('aiSettings.helpTip') }}</div>
       </el-card>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive } from 'vue'
+import { computed, onMounted, reactive } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { Setting } from '@element-plus/icons-vue'
 import request from '../utils/request'
 
 const SECRET_MASK = '********'
 const PROTOCOLS = ['chat_completions', 'responses'] as const
+const { t } = useI18n()
 
 type ProtocolType = (typeof PROTOCOLS)[number]
 
@@ -176,7 +191,6 @@ type AISettings = {
   tertiaryModel: string
   temperature: number
   maxTokens: number
-  useMock: boolean
 }
 
 type AISettingsPayload = Partial<AISettings> & {
@@ -200,10 +214,18 @@ const defaultSettings: AISettings = {
   tertiaryModel: 'deepseek/deepseek-r1-0528:free',
   temperature: 0.35,
   maxTokens: 1400,
-  useMock: false,
 }
 
 const form = reactive<AISettings>({ ...defaultSettings })
+const protocolOptions = computed(() => ([
+  { label: t('aiSettings.protocol.responses'), value: 'responses' as ProtocolType },
+  { label: t('aiSettings.protocol.chatCompletions'), value: 'chat_completions' as ProtocolType }
+]))
+const temperatureMarks = computed(() => ({
+  0: t('aiSettings.temperatureMarks.low'),
+  1: t('aiSettings.temperatureMarks.mid'),
+  2: t('aiSettings.temperatureMarks.high')
+}))
 
 const normalizeModelFallbacks = (value: unknown) => {
   if (Array.isArray(value)) {
@@ -252,23 +274,22 @@ const applySettings = (settings: AISettingsPayload | undefined) => {
     tertiaryModel: settings?.tertiaryModel || '',
     temperature: typeof settings?.temperature === 'number' ? settings.temperature : defaultSettings.temperature,
     maxTokens: typeof settings?.maxTokens === 'number' ? settings.maxTokens : defaultSettings.maxTokens,
-    useMock: typeof settings?.useMock === 'boolean' ? settings.useMock : defaultSettings.useMock,
   })
 }
 
 const validateForm = () => {
   if (!form.apiEndpoint.trim()) {
-    ElMessage.warning('请先填写 AI API 地址')
+    ElMessage.warning(t('aiSettings.validate.apiEndpointRequired'))
     return false
   }
 
   if (!form.model.trim()) {
-    ElMessage.warning('请先填写主模型名称')
+    ElMessage.warning(t('aiSettings.validate.modelRequired'))
     return false
   }
 
   if (!PROTOCOLS.includes(form.protocol)) {
-    ElMessage.warning('请选择有效的协议类型')
+    ElMessage.warning(t('aiSettings.validate.protocolInvalid'))
     return false
   }
 
@@ -277,15 +298,15 @@ const validateForm = () => {
   )
   if (hasSecondary) {
     if (!form.secondaryApiEndpoint.trim()) {
-      ElMessage.warning('请补充次级 API 地址')
+      ElMessage.warning(t('aiSettings.validate.secondaryApiEndpointRequired'))
       return false
     }
     if (!form.secondaryModel.trim()) {
-      ElMessage.warning('请补充次级模型名称')
+      ElMessage.warning(t('aiSettings.validate.secondaryModelRequired'))
       return false
     }
     if (!PROTOCOLS.includes(form.secondaryProtocol)) {
-      ElMessage.warning('请选择有效的次级协议类型')
+      ElMessage.warning(t('aiSettings.validate.secondaryProtocolInvalid'))
       return false
     }
   }
@@ -295,15 +316,15 @@ const validateForm = () => {
   )
   if (hasTertiary) {
     if (!form.tertiaryApiEndpoint.trim()) {
-      ElMessage.warning('请补充三级 API 地址')
+      ElMessage.warning(t('aiSettings.validate.tertiaryApiEndpointRequired'))
       return false
     }
     if (!form.tertiaryModel.trim()) {
-      ElMessage.warning('请补充三级模型名称')
+      ElMessage.warning(t('aiSettings.validate.tertiaryModelRequired'))
       return false
     }
     if (!PROTOCOLS.includes(form.tertiaryProtocol)) {
-      ElMessage.warning('请选择有效的三级协议类型')
+      ElMessage.warning(t('aiSettings.validate.tertiaryProtocolInvalid'))
       return false
     }
   }
@@ -318,7 +339,7 @@ const loadSettings = async () => {
     applySettings(payload?.data)
   } catch {
     applySettings(defaultSettings)
-    ElMessage.warning('Failed to load AI settings, using defaults')
+    ElMessage.warning(t('aiSettings.toasts.loadFailed'))
   }
 }
 
@@ -345,10 +366,9 @@ const saveSettings = async () => {
       tertiaryModel: form.tertiaryModel.trim(),
       temperature: form.temperature,
       maxTokens: form.maxTokens,
-      useMock: form.useMock,
     })
 
-    ElMessage.success('AI settings saved')
+    ElMessage.success(t('aiSettings.toasts.saveSuccess'))
     if (form.apiKey) {
       form.apiKey = '********'
     }
@@ -359,7 +379,7 @@ const saveSettings = async () => {
       form.tertiaryApiKey = SECRET_MASK
     }
   } catch {
-    ElMessage.error('保存 AI 设置失败')
+    ElMessage.error(t('aiSettings.toasts.saveFailed'))
   }
 }
 
@@ -384,12 +404,11 @@ const resetSettings = async () => {
       tertiaryModel: defaultSettings.tertiaryModel,
       temperature: defaultSettings.temperature,
       maxTokens: defaultSettings.maxTokens,
-      useMock: defaultSettings.useMock,
     })
 
-    ElMessage.success('Defaults restored')
+    ElMessage.success(t('aiSettings.toasts.resetSuccess'))
   } catch {
-    ElMessage.error('恢复默认设置失败')
+    ElMessage.error(t('aiSettings.toasts.resetFailed'))
   }
 }
 
@@ -420,111 +439,76 @@ onMounted(() => {
 
 .settings-card {
   border-radius: 10px;
-  max-width: 980px;
-}
-
-.settings-card :deep(.el-card__body) {
-  padding: 24px 26px 20px;
 }
 
 .settings-form {
-  max-width: 920px;
-}
-
-.full-width {
   width: 100%;
 }
 
 .group-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 22px;
+  gap: 16px;
+  margin-bottom: 16px;
 }
 
 .settings-group {
-  margin-bottom: 24px;
+  border: 1px solid #eef2f7;
+  border-radius: 10px;
+  padding: 14px;
+  background: #fff;
 }
 
 .group-title {
+  margin-bottom: 12px;
   font-size: 14px;
   font-weight: 600;
-  color: #606266;
-  margin-bottom: 16px;
-  padding-left: 10px;
-  border-left: 3px solid #1a73e8;
+  color: #1f2937;
+}
+
+.full-width {
+  width: 100%;
 }
 
 .slider-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto;
   align-items: center;
-  gap: 16px;
+  gap: 10px;
   width: 100%;
-  min-width: 0;
-}
-
-.slider-row :deep(.el-slider) {
-  flex: 1;
-  min-width: 0;
 }
 
 .slider-value {
-  min-width: 44px;
-  flex: 0 0 auto;
+  min-width: 38px;
   text-align: right;
-  color: #303133;
-  font-weight: 500;
+  color: #2563eb;
+  font-weight: 600;
 }
 
-.settings-form :deep(.el-input-number) {
-  width: 100%;
-  max-width: 240px;
+.action-row {
+  margin-top: 8px;
 }
 
 .action-row :deep(.el-form-item__content) {
   display: flex;
+  gap: 10px;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 14px;
 }
 
 .help-tip {
   margin-top: 10px;
-  color: #909399;
-  font-size: 13px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 @media (max-width: 992px) {
   .ai-settings-page {
-    padding: 18px;
-  }
-
-  .settings-card {
-    max-width: 100%;
-  }
-
-  .settings-card :deep(.el-card__body) {
-    padding: 20px;
-  }
-
-  .settings-form {
-    max-width: 100%;
+    padding: 16px;
   }
 
   .group-grid {
     grid-template-columns: 1fr;
-    gap: 4px;
-  }
-
-  .settings-group {
-    margin-bottom: 20px;
-  }
-
-  .settings-form :deep(.el-form-item__label) {
-    width: 128px !important;
-  }
-
-  .settings-form :deep(.el-input-number) {
-    max-width: 100%;
   }
 }
 
@@ -535,11 +519,10 @@ onMounted(() => {
 
   .section-title {
     font-size: 18px;
-    margin-bottom: 14px;
   }
 
-  .settings-card :deep(.el-card__body) {
-    padding: 16px 14px;
+  .settings-group {
+    padding: 12px;
   }
 
   .settings-form :deep(.el-form-item__label) {
@@ -551,32 +534,10 @@ onMounted(() => {
 
   .settings-form :deep(.el-form-item__content) {
     margin-left: 0 !important;
-    min-width: 0;
-  }
-
-  .slider-row {
-    gap: 10px;
-  }
-
-  .slider-value {
-    min-width: 36px;
-    font-size: 13px;
-  }
-
-  .action-row {
-    margin-top: 6px;
-  }
-
-  .action-row :deep(.el-form-item__content) {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
   }
 
   .action-row :deep(.el-button) {
-    width: 100%;
-    margin-left: 0 !important;
+    min-height: 44px;
   }
 }
 </style>
-

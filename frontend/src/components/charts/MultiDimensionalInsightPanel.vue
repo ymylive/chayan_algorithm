@@ -8,29 +8,29 @@
     <div class="chart-grid">
       <InsightChartCard
         type="radar"
-        title="Capability Radar"
-        subtitle="Cross-domain capability profile"
+        :title="t('aiAnalyze.panel.radarTitle')"
+        :subtitle="t('aiAnalyze.panel.radarSubtitle')"
         :option="radarOption"
         :loading="loading"
       />
       <InsightChartCard
         type="line"
-        title="Trend Tracking"
-        subtitle="Monthly trajectory and momentum"
+        :title="t('aiAnalyze.panel.lineTitle')"
+        :subtitle="t('aiAnalyze.panel.lineSubtitle')"
         :option="lineOption"
         :loading="loading"
       />
       <InsightChartCard
         type="bar"
-        title="Dimension Comparison"
-        subtitle="Category-level value comparison"
+        :title="t('aiAnalyze.panel.barTitle')"
+        :subtitle="t('aiAnalyze.panel.barSubtitle')"
         :option="barOption"
         :loading="loading"
       />
       <InsightChartCard
         type="graph"
-        title="Relationship Network"
-        subtitle="ECharts graph series for entity links"
+        :title="t('aiAnalyze.panel.graphTitle')"
+        :subtitle="t('aiAnalyze.panel.graphSubtitle')"
         :option="graphOption"
         :loading="loading"
       />
@@ -40,6 +40,8 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+import type { EChartsOption } from 'echarts';
 import InsightChartCard from './InsightChartCard.vue';
 import {
   createBarChartOption,
@@ -79,6 +81,7 @@ interface MultiDimensionalInsightData {
   graph?: GraphData;
 }
 
+const { t } = useI18n();
 const props = withDefaults(
   defineProps<{
     title?: string;
@@ -93,51 +96,8 @@ const props = withDefaults(
   },
 );
 
-const DEFAULT_RADAR: RadarData = {
-  indicators: [
-    { name: 'Growth', max: 100 },
-    { name: 'Stability', max: 100 },
-    { name: 'Innovation', max: 100 },
-    { name: 'Efficiency', max: 100 },
-    { name: 'Resilience', max: 100 },
-  ],
-  values: [78, 84, 71, 88, 80],
-  seriesName: 'Capability',
-};
-
-const DEFAULT_LINE: CartesianData = {
-  categories: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
-  values: [112, 126, 119, 141, 156, 169],
-  seriesName: 'Trend',
-  unit: 'index',
-};
-
-const DEFAULT_BAR: CartesianData = {
-  categories: ['Revenue', 'Cost', 'Margin', 'Asset', 'Risk'],
-  values: [240, 180, 92, 208, 74],
-  seriesName: 'Benchmark',
-  unit: 'pts',
-};
-
-const DEFAULT_GRAPH: GraphData = {
-  categories: [{ name: 'Core' }, { name: 'Partner' }, { name: 'Market' }],
-  nodes: [
-    { id: 'enterprise', name: 'Enterprise', category: 0, symbolSize: 52, value: 100 },
-    { id: 'supply', name: 'Supply Chain', category: 1, value: 72 },
-    { id: 'r-and-d', name: 'R&D', category: 0, value: 83 },
-    { id: 'customer', name: 'Customer', category: 2, value: 90 },
-    { id: 'channel', name: 'Channel', category: 1, value: 68 },
-    { id: 'policy', name: 'Policy', category: 2, value: 61 },
-  ],
-  links: [
-    { source: 'enterprise', target: 'supply', value: 7.5 },
-    { source: 'enterprise', target: 'r-and-d', value: 8.8 },
-    { source: 'enterprise', target: 'customer', value: 9.1 },
-    { source: 'customer', target: 'channel', value: 6.6 },
-    { source: 'policy', target: 'enterprise', value: 5.8 },
-    { source: 'supply', target: 'channel', value: 6.3 },
-  ],
-  seriesName: 'Relations',
+const EMPTY_OPTION: EChartsOption = {
+  series: [],
 };
 
 const isValidRadarData = (value?: RadarData): value is RadarData => {
@@ -158,15 +118,25 @@ const isValidGraphData = (value?: GraphData): value is GraphData => {
     && Array.isArray(value.links) && value.links.length > 0;
 };
 
-const radarData = computed<RadarData>(() => (isValidRadarData(props.data?.radar) ? props.data!.radar : DEFAULT_RADAR));
-const lineData = computed<CartesianData>(() => (isValidCartesianData(props.data?.line) ? props.data!.line : DEFAULT_LINE));
-const barData = computed<CartesianData>(() => (isValidCartesianData(props.data?.bar) ? props.data!.bar : DEFAULT_BAR));
-const graphData = computed<GraphData>(() => (isValidGraphData(props.data?.graph) ? props.data!.graph : DEFAULT_GRAPH));
+const radarOption = computed(() => {
+  const radar = props.data?.radar;
+  return isValidRadarData(radar) ? createRadarChartOption(radar) : EMPTY_OPTION;
+});
 
-const radarOption = computed(() => createRadarChartOption(radarData.value));
-const lineOption = computed(() => createLineChartOption(lineData.value));
-const barOption = computed(() => createBarChartOption(barData.value));
-const graphOption = computed(() => createGraphChartOption(graphData.value));
+const lineOption = computed(() => {
+  const line = props.data?.line;
+  return isValidCartesianData(line) ? createLineChartOption(line) : EMPTY_OPTION;
+});
+
+const barOption = computed(() => {
+  const bar = props.data?.bar;
+  return isValidCartesianData(bar) ? createBarChartOption(bar) : EMPTY_OPTION;
+});
+
+const graphOption = computed(() => {
+  const graph = props.data?.graph;
+  return isValidGraphData(graph) ? createGraphChartOption(graph) : EMPTY_OPTION;
+});
 </script>
 
 <style scoped>
