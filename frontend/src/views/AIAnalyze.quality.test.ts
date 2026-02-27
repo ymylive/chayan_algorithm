@@ -7,8 +7,8 @@ const readView = () => {
   return fs.readFileSync(fullPath, 'utf8')
 }
 
-const readSharedFallbackReasonMap = () => {
-  const fullPath = path.resolve(process.cwd(), '../shared/mcp-fallback-reasons.json')
+const readFallbackReasonMap = () => {
+  const fullPath = path.resolve(process.cwd(), 'src/constants/mcp-fallback-reasons.json')
   return JSON.parse(fs.readFileSync(fullPath, 'utf8')) as Record<string, string>
 }
 
@@ -34,11 +34,11 @@ describe('AIAnalyze quality dashboard contract', () => {
 
   test('shows MCP health badges with fallback reason mapping', () => {
     const source = readView()
-    const sharedReasonMap = readSharedFallbackReasonMap()
+    const sharedReasonMap = readFallbackReasonMap()
 
     expect(source).toContain('result.value?.mcp?.mcpHealth')
     expect(source).toContain('mcpFallbackReasons')
-    expect(source).toContain("import mcpFallbackReasonLabelMap from '@shared/mcp-fallback-reasons.json'")
+    expect(source).toContain("import mcpFallbackReasonLabelMap from '../constants/mcp-fallback-reasons.json'")
     expect(source).toContain('mcpFallbackReasonLabelMap')
     expect(sharedReasonMap.mcp_payload_invalid).toBe('MCP 返回结构异常')
     expect(sharedReasonMap.mcp_tool_failed).toBe('MCP 工具调用失败')

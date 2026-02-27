@@ -33,6 +33,6 @@ describe('AIAnalyze view contract', () => {
     expect(source).toContain('mcpHealthVisible')
     expect(source).toContain('mcpHealthTagType')
     expect(source).toContain('mcpFallbackReasonLabelMap')
-    expect(source).toContain("@shared/mcp-fallback-reasons.json")
+    expect(source).toContain("../constants/mcp-fallback-reasons.json")
   })
 })

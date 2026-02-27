@@ -1,0 +1,8 @@
+{
+  "mcp_client_unavailable": "MCP 客户端不可用",
+  "mcp_tool_failed": "MCP 工具调用失败",
+  "mcp_payload_invalid": "MCP 返回结构异常",
+  "mcp_fallback_empty": "MCP 未返回有效数据",
+  "query_request_failed": "检索请求失败",
+  "partial_failure": "部分检索失败"
+}

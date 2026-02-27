@@ -64,11 +64,12 @@ const hasRenderableOption = computed(() => {
     : (option.series ? [option.series] : []);
   if (seriesList.length === 0) return false;
 
-  return seriesList.some((series) => {
+  return seriesList.some((series: unknown) => {
     if (!series || typeof series !== 'object') return false;
-    const data = Array.isArray(series.data) ? series.data : [];
-    const links = Array.isArray(series.links) ? series.links : [];
-    const nodes = Array.isArray(series.nodes) ? series.nodes : [];
+    const seriesObject = series as Record<string, unknown>;
+    const data = Array.isArray(seriesObject.data) ? seriesObject.data : [];
+    const links = Array.isArray(seriesObject.links) ? seriesObject.links : [];
+    const nodes = Array.isArray(seriesObject.nodes) ? seriesObject.nodes : [];
     return data.length > 0 || links.length > 0 || nodes.length > 0;
   });
 });

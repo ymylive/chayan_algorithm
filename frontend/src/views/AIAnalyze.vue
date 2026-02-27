@@ -305,7 +305,7 @@ import {
   type AnalysisJobStatus,
   type PendingAnalysisJob
 } from '../stores/analysis'
-import mcpFallbackReasonLabelMap from '@shared/mcp-fallback-reasons.json'
+import mcpFallbackReasonLabelMap from '../constants/mcp-fallback-reasons.json'
 
 const form = reactive({
   target: ''
