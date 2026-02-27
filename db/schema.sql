@@ -1,6 +1,7 @@
 CREATE TABLE IF NOT EXISTS enterprises (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
+    user_id INTEGER,
     industry VARCHAR(100),
     revenue NUMERIC(18,2) NOT NULL DEFAULT 0,
     employee_count INTEGER NOT NULL DEFAULT 0,
@@ -53,7 +54,28 @@ CREATE TABLE IF NOT EXISTS user_ai_settings (
     CONSTRAINT uq_user_ai_settings_user_id UNIQUE (user_id)
 );
 
+CREATE TABLE IF NOT EXISTS ai_analysis_jobs (
+    id UUID PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    target VARCHAR(200) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'queued',
+    progress INTEGER NOT NULL DEFAULT 0,
+    workflow_step VARCHAR(80) NOT NULL DEFAULT 'queued',
+    workflow_trace JSONB NOT NULL DEFAULT '[]',
+    request_payload JSONB NOT NULL DEFAULT '{}',
+    result_json JSONB,
+    error_message TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    started_at TIMESTAMP,
+    completed_at TIMESTAMP,
+    CONSTRAINT chk_ai_analysis_jobs_status CHECK (status IN ('queued', 'running', 'completed', 'failed')),
+    CONSTRAINT chk_ai_analysis_jobs_progress CHECK (progress BETWEEN 0 AND 100),
+    CONSTRAINT chk_ai_analysis_jobs_target_not_empty CHECK (LENGTH(TRIM(target)) > 0)
+);
+
 ALTER TABLE enterprises
+    ADD COLUMN IF NOT EXISTS user_id INTEGER,
     ADD COLUMN IF NOT EXISTS revenue NUMERIC(18,2) NOT NULL DEFAULT 0,
     ADD COLUMN IF NOT EXISTS employee_count INTEGER NOT NULL DEFAULT 0,
     ADD COLUMN IF NOT EXISTS region VARCHAR(100) NOT NULL DEFAULT '',
@@ -81,13 +103,24 @@ BEGIN
         ALTER TABLE enterprises
             ADD CONSTRAINT chk_enterprises_status_valid CHECK (status IN ('active', 'inactive', 'archived'));
     END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'fk_enterprises_user_id'
+    ) THEN
+        ALTER TABLE enterprises
+            ADD CONSTRAINT fk_enterprises_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL;
+    END IF;
 END $$;
 
 CREATE INDEX idx_enterprises_industry ON enterprises(industry);
 CREATE INDEX idx_enterprises_created ON enterprises(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_enterprises_user_id ON enterprises(user_id);
 CREATE INDEX idx_analysis_results_enterprise ON analysis_results(enterprise_id);
 CREATE INDEX idx_analysis_results_type ON analysis_results(analysis_type);
 CREATE INDEX idx_analysis_results_enterprise_created ON analysis_results(enterprise_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_analysis_jobs_user_created ON ai_analysis_jobs(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_analysis_jobs_status ON ai_analysis_jobs(status);
+CREATE INDEX IF NOT EXISTS idx_ai_analysis_jobs_target_lower ON ai_analysis_jobs(LOWER(target));
 CREATE INDEX idx_recommendations_enterprise ON recommendations(enterprise_id);
 CREATE INDEX idx_recommendations_priority ON recommendations(priority DESC);
 CREATE INDEX idx_recommendations_enterprise_priority ON recommendations(enterprise_id, priority DESC);

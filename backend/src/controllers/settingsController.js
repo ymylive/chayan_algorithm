@@ -41,6 +41,31 @@ const normalizeAndValidateApiEndpoint = (apiEndpoint) => {
   return { valid: true, value: parsed.toString() };
 };
 
+const normalizeAndValidateTuningDecision = (payload) => {
+  if (payload === undefined) {
+    return { valid: true, value: undefined };
+  }
+
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return { valid: false, reason: 'Tuning update rejected: tuning decision payload must be an object' };
+  }
+
+  const inputs = payload.inputs && typeof payload.inputs === 'object' && !Array.isArray(payload.inputs)
+    ? payload.inputs
+    : payload;
+
+  const baseline = inputs.offlineKpiDelta?.baseline;
+  const candidate = inputs.offlineKpiDelta?.candidate;
+  const hasBaseline = baseline && typeof baseline === 'object' && !Array.isArray(baseline) && Object.keys(baseline).length > 0;
+  const hasCandidate = candidate && typeof candidate === 'object' && !Array.isArray(candidate) && Object.keys(candidate).length > 0;
+
+  if (!hasBaseline || !hasCandidate) {
+    return { valid: false, reason: 'Tuning update rejected: baseline/candidate KPI delta evidence is required' };
+  }
+
+  return { valid: true, value: payload };
+};
+
 const getSettings = async (req, res) => {
   try {
     const userId = resolveUserId(req.user);
@@ -89,7 +114,13 @@ const updateSettings = async (req, res) => {
       tertiaryModel,
       temperature,
       maxTokens,
-      useMock
+      useMock,
+      qualityContractEnabled,
+      qualityStrictMode,
+      qualityMinCoverageSources,
+      qualityPolicyVersion,
+      qualityCanaryPolicy,
+      qualityTuningDecision
     } = req.body;
 
     let nextApiEndpoint;
@@ -99,6 +130,11 @@ const updateSettings = async (req, res) => {
         return res.status(400).json({ success: false, message: endpointCheck.reason });
       }
       nextApiEndpoint = endpointCheck.value;
+    }
+
+    const tuningDecisionCheck = normalizeAndValidateTuningDecision(qualityTuningDecision);
+    if (!tuningDecisionCheck.valid) {
+      return res.status(400).json({ success: false, message: tuningDecisionCheck.reason });
     }
 
     await updateUserSettings(userId, {
@@ -118,7 +154,13 @@ const updateSettings = async (req, res) => {
       tertiaryModel,
       temperature,
       maxTokens,
-      useMock
+      useMock,
+      qualityContractEnabled,
+      qualityStrictMode,
+      qualityMinCoverageSources,
+      qualityPolicyVersion,
+      qualityCanaryPolicy,
+      qualityTuningDecision: tuningDecisionCheck.value
     });
 
     logger.info('AI settings updated');

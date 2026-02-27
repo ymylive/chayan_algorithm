@@ -1,0 +1,18 @@
+{
+  "fixtureVersion": "1.0",
+  "scenarioId": "conflicting-evidence",
+  "expected": {
+    "outcome": "degrade",
+    "degraded": true,
+    "confidenceBand": "medium",
+    "topFindings": [
+      "Key references conflict on direction and reduce certainty",
+      "System should preserve caution and avoid high-confidence claims"
+    ],
+    "dataGapFlags": {
+      "competitorsInsufficient": false,
+      "marketReferencesMissing": false,
+      "financialReferencesMissing": false
+    }
+  }
+}

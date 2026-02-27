@@ -1,0 +1,91 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Golden Benchmark Input Fixture",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "fixtureVersion",
+    "scenarioId",
+    "class",
+    "target",
+    "evidence",
+    "constraints"
+  ],
+  "properties": {
+    "fixtureVersion": { "const": "1.0" },
+    "scenarioId": { "type": "string", "minLength": 3 },
+    "class": {
+      "enum": [
+        "normal",
+        "noisy_adversarial",
+        "low_evidence",
+        "conflicting_evidence",
+        "insufficient_evidence"
+      ]
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "industry"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "industry": { "type": "string", "minLength": 1 }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["competitors", "marketReferences", "financialReferences"],
+      "properties": {
+        "competitors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "source", "relevanceScore"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "source": { "type": "string", "minLength": 1 },
+              "relevanceScore": { "type": "number" }
+            }
+          }
+        },
+        "marketReferences": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["title", "source", "confidence"],
+            "properties": {
+              "title": { "type": "string", "minLength": 1 },
+              "source": { "type": "string", "minLength": 1 },
+              "confidence": { "type": "number" }
+            }
+          }
+        },
+        "financialReferences": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["title", "source", "confidence"],
+            "properties": {
+              "title": { "type": "string", "minLength": 1 },
+              "source": { "type": "string", "minLength": 1 },
+              "confidence": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+    "constraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["offlineOnly", "deterministicSeed"],
+      "properties": {
+        "offlineOnly": { "const": true },
+        "deterministicSeed": { "type": "string", "minLength": 3 }
+      }
+    }
+  }
+}

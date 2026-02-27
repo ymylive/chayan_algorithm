@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Golden Benchmark Expected Fixture",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["fixtureVersion", "scenarioId", "expected"],
+  "properties": {
+    "fixtureVersion": { "const": "1.0" },
+    "scenarioId": { "type": "string", "minLength": 3 },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outcome",
+        "degraded",
+        "confidenceBand",
+        "topFindings",
+        "dataGapFlags"
+      ],
+      "properties": {
+        "outcome": { "enum": ["accept", "degrade", "abstain"] },
+        "degraded": { "type": "boolean" },
+        "confidenceBand": { "enum": ["high", "medium", "low"] },
+        "topFindings": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "dataGapFlags": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "competitorsInsufficient",
+            "marketReferencesMissing",
+            "financialReferencesMissing"
+          ],
+          "properties": {
+            "competitorsInsufficient": { "type": "boolean" },
+            "marketReferencesMissing": { "type": "boolean" },
+            "financialReferencesMissing": { "type": "boolean" }
+          }
+        }
+      }
+    }
+  }
+}

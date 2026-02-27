@@ -2,6 +2,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { parseFile } = require('../utils/fileParser');
+const { resolveUserId } = require('../utils/coercion');
 const pool = require('../config/database');
 
 const DEFAULT_MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024;
@@ -12,6 +13,8 @@ const ALLOWED_MIME_TYPES = new Set([
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 ]);
 const ALLOWED_EXTENSIONS = new Set(['.csv', '.json', '.xlsx']);
+
+const isAdminUser = (user) => user && user.role === 'admin';
 
 function toPositiveInt(value, fallback) {
   const parsed = Number(value);
@@ -66,7 +69,7 @@ async function cleanupUploadedFile(filePath) {
   await fs.promises.unlink(filePath).catch(() => {});
 }
 
-async function bulkInsertEnterprises(rows) {
+async function bulkInsertEnterprises(rows, ownerUserId) {
   const batchSize = toPositiveInt(process.env.UPLOAD_INSERT_BATCH_SIZE, DEFAULT_INSERT_BATCH_SIZE);
   const preview = [];
   let insertedCount = 0;
@@ -77,13 +80,13 @@ async function bulkInsertEnterprises(rows) {
     const params = [];
 
     batch.forEach((row, rowIndex) => {
-      const offset = rowIndex * 2;
-      values.push(`($${offset + 1}, $${offset + 2})`);
-      params.push(row['企业名称'], row['行业']);
+      const offset = rowIndex * 3;
+      values.push(`($${offset + 1}, $${offset + 2}, $${offset + 3})`);
+      params.push(row['企业名称'], row['行业'], ownerUserId);
     });
 
     const result = await pool.query(
-      `INSERT INTO enterprises (name, industry) VALUES ${values.join(', ')} RETURNING *`,
+      `INSERT INTO enterprises (name, industry, user_id) VALUES ${values.join(', ')} RETURNING *`,
       params
     );
 
@@ -102,6 +105,12 @@ async function handleUpload(req, res) {
   const uploadedFilePath = req.file?.path;
 
   try {
+    const adminUser = isAdminUser(req.user);
+    const userId = resolveUserId(req.user);
+    if (!adminUser && !userId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
     if (req.fileValidationError) {
       return res.status(400).json({ error: req.fileValidationError });
     }
@@ -118,7 +127,7 @@ async function handleUpload(req, res) {
       return res.status(400).json({ error: 'No valid data found. Required fields: 企业名称, 行业' });
     }
 
-    const insertedResult = await bulkInsertEnterprises(validated);
+    const insertedResult = await bulkInsertEnterprises(validated, adminUser ? null : userId);
 
     res.json({
       success: true,
@@ -127,7 +136,7 @@ async function handleUpload(req, res) {
       preview: insertedResult.preview
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Failed to process upload' });
   } finally {
     await cleanupUploadedFile(uploadedFilePath);
   }

@@ -1,96 +1,44 @@
 <template>
-  <el-container class="main-layout" :class="{ 'is-mobile': isMobile }">
-    <el-aside class="sidebar" :class="{ 'is-mobile': isMobile, 'is-open': isMobile && mobileMenuOpen }" :style="sidebarStyle">
-      <div class="sidebar-shell">
-        <div class="logo-area">
-          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="logo-icon" aria-hidden="true">
-            <rect x="3" y="12" width="4" height="8" rx="1" fill="#1a73e8" />
-            <rect x="10" y="8" width="4" height="12" rx="1" fill="#63a4ff" />
-            <rect x="17" y="5" width="4" height="15" rx="1" fill="#8ab4f8" />
-          </svg>
-          <span v-if="!menuCollapsed" class="logo-text">茶研分析</span>
-        </div>
-
-        <el-menu
-          class="sidebar-menu"
-          :default-active="route.path"
-          :collapse="menuCollapsed"
-          :collapse-transition="false"
-          router
-          background-color="#001529"
-          text-color="#ffffffb3"
-          active-text-color="#fff"
-          @select="handleMenuSelect"
-        >
-          <el-menu-item index="/">
-            <el-icon><DataLine /></el-icon>
-            <template #title>首页概览</template>
-          </el-menu-item>
-          <el-menu-item index="/upload">
-            <el-icon><Upload /></el-icon>
-            <template #title>数据上传</template>
-          </el-menu-item>
-          <el-menu-item index="/analysis">
-            <el-icon><PieChart /></el-icon>
-            <template #title>数据分析</template>
-          </el-menu-item>
-          <el-menu-item index="/recommendations">
-            <el-icon><Promotion /></el-icon>
-            <template #title>决策建议</template>
-          </el-menu-item>
-          <el-menu-item index="/ai-analyze">
-            <el-icon><Cpu /></el-icon>
-            <template #title>AI 分析</template>
-          </el-menu-item>
-          <el-menu-item index="/ai-settings">
-            <el-icon><Setting /></el-icon>
-            <template #title>AI 设置</template>
-          </el-menu-item>
-        </el-menu>
-
-        <div v-if="!isMobile" class="collapse-trigger">
-          <el-button class="collapse-button" text @click="toggleSidebar">
-            <el-icon>
-              <Fold v-if="!isCollapsed" />
-              <Expand v-else />
-            </el-icon>
-            <span v-if="!isCollapsed">收起导航</span>
-          </el-button>
-        </div>
-      </div>
-    </el-aside>
-
-    <transition name="mask-fade">
-      <div v-if="isMobile && mobileMenuOpen" class="sidebar-mask" @click="closeMobileMenu" />
-    </transition>
+  <el-container class="main-layout">
+    <AppSidebar
+      app-name="ChaYan Analytics"
+      :is-mobile="isMobile"
+      :mobile-open="mobileMenuOpen"
+      :collapsed="isCollapsed"
+      @update:mobileOpen="mobileMenuOpen = $event"
+      @navigate="handleMenuNavigate"
+      @toggle-collapse="toggleSidebar"
+    />
 
     <el-container class="layout-main">
-      <el-header class="top-header">
-        <div class="header-left">
-          <el-button v-if="isMobile" class="mobile-menu-trigger" text @click="toggleMobileMenu">
-            <el-icon>
-              <Expand v-if="!mobileMenuOpen" />
-              <Fold v-else />
-            </el-icon>
-          </el-button>
-
-          <el-breadcrumb separator="/" class="header-breadcrumb">
-            <el-breadcrumb-item>茶研分析系统</el-breadcrumb-item>
-            <el-breadcrumb-item>{{ currentPageName }}</el-breadcrumb-item>
-          </el-breadcrumb>
-        </div>
-
-        <div class="header-user">
-          <span class="avatar-placeholder">
-            <el-icon><User /></el-icon>
-          </span>
-          <span class="user-name">管理员</span>
-          <el-button class="logout-button" text @click="handleLogout">退出登录</el-button>
-        </div>
-      </el-header>
+      <AppTopbar
+        :title="currentPageName"
+        :subtitle="topbarSubtitle"
+        :is-mobile="isMobile"
+        :mobile-menu-open="mobileMenuOpen"
+        @toggle-menu="toggleMobileMenu"
+        @logout="handleLogout"
+      >
+        <template #right>
+          <span class="avatar-placeholder" aria-hidden="true">A</span>
+          <span class="user-name">Admin</span>
+          <button type="button" class="logout-button" @click="handleLogout">Logout</button>
+        </template>
+      </AppTopbar>
 
       <el-main class="content-area">
-        <router-view />
+        <router-view v-slot="{ Component }">
+          <Suspense>
+            <component :is="Component" />
+            <template #fallback>
+              <div class="route-skeleton">
+                <AppSkeleton variant="title" width="220px" />
+                <AppSkeleton variant="text" :lines="4" />
+                <AppSkeleton variant="rect" height="180px" />
+              </div>
+            </template>
+          </Suspense>
+        </router-view>
       </el-main>
     </el-container>
   </el-container>
@@ -99,85 +47,74 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import {
-  Cpu,
-  DataLine,
-  Expand,
-  Fold,
-  PieChart,
-  Promotion,
-  Setting,
-  Upload,
-  User
-} from '@element-plus/icons-vue'
+import AppSidebar from '../components/layout/AppSidebar.vue'
+import AppTopbar from '../components/layout/AppTopbar.vue'
+import AppSkeleton from '../components/feedback/AppSkeleton.vue'
 import request from '../utils/request'
 
 const MOBILE_BREAKPOINT = 992
+const SIDEBAR_COLLAPSED_KEY = 'layout_sidebar_collapsed'
 
-const isCollapsed = ref(false)
 const isMobile = ref(typeof window !== 'undefined' ? window.innerWidth <= MOBILE_BREAKPOINT : false)
 const mobileMenuOpen = ref(false)
+const isCollapsed = ref(false)
 const route = useRoute()
 const router = useRouter()
 
-const menuCollapsed = computed(() => !isMobile.value && isCollapsed.value)
-
-const sidebarStyle = computed(() => {
-  if (isMobile.value) {
-    return { width: '220px' }
-  }
-
-  return { width: isCollapsed.value ? '64px' : '220px' }
-})
+if (typeof window !== 'undefined') {
+  isCollapsed.value = localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'
+}
 
 const pageNameMap: Record<string, string> = {
-  '/': '首页概览',
-  '/upload': '数据上传',
-  '/analysis': '数据分析',
-  '/recommendations': '决策建议',
-  '/ai-analyze': 'AI 分析',
-  '/ai-settings': 'AI 设置'
+  '/': 'Overview',
+  '/upload': 'Data Upload',
+  '/analysis': 'Analysis',
+  '/recommendations': 'Recommendations',
+  '/ai-analyze': 'AI Analyze',
+  '/ai-settings': 'AI Settings',
+  '/deep-research': 'Deep Research'
 }
 
 const currentPageName = computed(() => {
   const exactMatch = pageNameMap[route.path]
-  if (exactMatch) {
-    return exactMatch
-  }
+  if (exactMatch) return exactMatch
 
   const partialMatch = Object.entries(pageNameMap).find(([path]) => route.path.startsWith(`${path}/`))
-  return partialMatch?.[1] ?? '页面'
+  return partialMatch?.[1] ?? 'Workspace'
 })
+
+const topbarSubtitle = computed(() => 'LLM Multi-Dimensional Enterprise Intelligence')
 
 const updateIsMobile = () => {
   isMobile.value = window.innerWidth <= MOBILE_BREAKPOINT
-
   if (!isMobile.value) {
     mobileMenuOpen.value = false
+    return
   }
+  isCollapsed.value = false
 }
 
 const toggleSidebar = () => {
+  if (isMobile.value) return
   isCollapsed.value = !isCollapsed.value
 }
 
 const toggleMobileMenu = () => {
+  if (!isMobile.value) return
   mobileMenuOpen.value = !mobileMenuOpen.value
 }
 
-const closeMobileMenu = () => {
-  mobileMenuOpen.value = false
-}
-
-const handleMenuSelect = () => {
+const handleMenuNavigate = () => {
   if (isMobile.value) {
-    closeMobileMenu()
+    mobileMenuOpen.value = false
   }
 }
 
 const handleLogout = async () => {
   try {
-    await request.post('/auth/logout')
+    await request.post('/auth/logout', null, {
+      headers: { 'X-Skip-Global-Loading': '1' }
+    })
   } catch {
   } finally {
     sessionStorage.removeItem('session_active')
@@ -190,10 +127,15 @@ watch(
   () => route.path,
   () => {
     if (isMobile.value) {
-      closeMobileMenu()
+      mobileMenuOpen.value = false
     }
   }
 )
+
+watch(isCollapsed, value => {
+  if (typeof window === 'undefined') return
+  localStorage.setItem(SIDEBAR_COLLAPSED_KEY, value ? '1' : '0')
+})
 
 onMounted(() => {
   updateIsMobile()
@@ -209,86 +151,8 @@ onBeforeUnmount(() => {
 .main-layout {
   height: 100vh;
   overflow: hidden;
-  background: #f0f2f5;
+  background: #f8fafc;
   position: relative;
-}
-
-.sidebar {
-  background: #001529;
-  transition: width 0.24s ease, transform 0.24s ease, box-shadow 0.24s ease;
-  overflow: hidden;
-  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.18);
-  z-index: 1201;
-}
-
-.sidebar-shell {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.logo-area {
-  height: 56px;
-  padding: 0 16px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: #fff;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  overflow: hidden;
-}
-
-.logo-icon {
-  width: 22px;
-  height: 22px;
-  flex: 0 0 auto;
-}
-
-.logo-text {
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  white-space: nowrap;
-}
-
-.sidebar-menu {
-  flex: 1;
-  border-right: none;
-}
-
-:deep(.sidebar-menu .el-menu-item) {
-  border-left: 3px solid transparent;
-  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
-}
-
-:deep(.sidebar-menu .el-menu-item:hover) {
-  background-color: rgba(255, 255, 255, 0.08) !important;
-  color: #fff !important;
-}
-
-:deep(.sidebar-menu .el-menu-item.is-active) {
-  border-left-color: #1a73e8;
-  background-color: rgba(255, 255, 255, 0.14) !important;
-  color: #fff !important;
-}
-
-:deep(.sidebar-menu .el-menu-item .el-icon) {
-  font-size: 18px;
-}
-
-.collapse-trigger {
-  padding: 10px 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.collapse-button {
-  width: 100%;
-  justify-content: flex-start;
-  color: #ffffffd9;
-}
-
-.collapse-button:hover {
-  color: #fff;
 }
 
 .layout-main {
@@ -296,126 +160,68 @@ onBeforeUnmount(() => {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  transition: padding 0.2s ease;
-}
-
-.top-header {
-  height: 60px;
-  padding: 0 24px;
-  background: #fff;
-  border-bottom: 1px solid #e8e8e8;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-shrink: 0;
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-}
-
-.header-breadcrumb {
-  min-width: 0;
-}
-
-:deep(.header-breadcrumb .el-breadcrumb__inner) {
-  white-space: nowrap;
-}
-
-.mobile-menu-trigger {
-  width: 36px;
-  height: 36px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: #303133;
-  border-radius: 8px;
-}
-
-.mobile-menu-trigger:hover {
-  background: rgba(26, 115, 232, 0.08);
-  color: #1a73e8;
-}
-
-.header-user {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #262626;
-}
-
-.avatar-placeholder {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: #f5f5f5;
-  color: #595959;
-}
-
-.user-name {
-  font-size: 14px;
-}
-
-.logout-button {
-  color: #606266;
-}
-
-.logout-button:hover {
-  color: #1a73e8;
 }
 
 .content-area {
-  background: #f0f2f5;
-  padding: 0;
+  background: #f8fafc;
+  padding: 20px;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
 }
 
-.sidebar-mask {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(1px);
-  z-index: 1200;
+.route-skeleton {
+  display: grid;
+  gap: 14px;
+  max-width: 1120px;
 }
 
-.mask-fade-enter-active,
-.mask-fade-leave-active {
-  transition: opacity 0.2s ease;
+.mobile-menu-trigger {
+  width: 36px;
+  height: 36px;
 }
 
-.mask-fade-enter-from,
-.mask-fade-leave-to {
-  opacity: 0;
+.avatar-placeholder {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #334155;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.user-name {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.logout-button {
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease;
+}
+
+.logout-button:hover {
+  color: #b91c1c;
+  border-color: #fecaca;
+  background: #fef2f2;
 }
 
 @media (max-width: 992px) {
-  .sidebar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    width: 220px !important;
-    transform: translateX(-100%);
-    box-shadow: none;
-  }
-
-  .sidebar.is-open {
-    transform: translateX(0);
-    box-shadow: 2px 0 16px rgba(0, 0, 0, 0.24);
-  }
-
-  .top-header {
-    padding: 0 14px;
-    height: 56px;
+  .content-area {
+    padding: 12px;
   }
 
   .user-name {

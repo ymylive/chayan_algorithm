@@ -1,0 +1,22 @@
+{
+  "fixtureVersion": "1.0",
+  "scenarioId": "low-evidence",
+  "class": "low_evidence",
+  "target": {
+    "name": "yunshu-manufacturing",
+    "industry": "smart-manufacturing"
+  },
+  "evidence": {
+    "competitors": [
+      { "name": "peer-a", "source": "bing_web", "relevanceScore": 1.4 }
+    ],
+    "marketReferences": [
+      { "title": "manufacturing-index-brief", "source": "report_archive", "confidence": 0.62 }
+    ],
+    "financialReferences": []
+  },
+  "constraints": {
+    "offlineOnly": true,
+    "deterministicSeed": "seed-low-001"
+  }
+}

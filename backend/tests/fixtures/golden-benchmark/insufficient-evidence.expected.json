@@ -1,0 +1,18 @@
+{
+  "fixtureVersion": "1.0",
+  "scenarioId": "insufficient-evidence",
+  "expected": {
+    "outcome": "abstain",
+    "degraded": true,
+    "confidenceBand": "low",
+    "topFindings": [
+      "Evidence is insufficient across all dimensions",
+      "System should abstain or produce only minimal degraded output"
+    ],
+    "dataGapFlags": {
+      "competitorsInsufficient": true,
+      "marketReferencesMissing": true,
+      "financialReferencesMissing": true
+    }
+  }
+}

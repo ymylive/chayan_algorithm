@@ -1,4 +1,5 @@
 const normalizeText = (value) => String(value || '').trim().toLowerCase();
+const OFFICIAL_RESPONSES_HOSTS = new Set(['api.openai.com']);
 
 const normalizeProtocol = (value) => {
   const normalized = normalizeText(value).replace(/[\s-]+/g, '_');
@@ -99,20 +100,129 @@ const parseJsonSafe = (value) => {
   }
 };
 
+const parseHost = (baseURL) => {
+  try {
+    const parsed = new URL(String(baseURL || '').trim());
+    return String(parsed.hostname || '').trim().toLowerCase();
+  } catch {
+    return '';
+  }
+};
+
+const isOfficialResponsesHost = (baseURL) => OFFICIAL_RESPONSES_HOSTS.has(parseHost(baseURL));
+
+const shouldForceResponsesStream = (baseURL, protocol = 'responses') => {
+  return normalizeProtocol(protocol) === 'responses' && !isOfficialResponsesHost(baseURL);
+};
+
+const resolveResponsesEndpoint = (baseURL) => {
+  const trimmed = String(baseURL || '').trim().replace(/\/+$/, '');
+  if (!trimmed) return '';
+  const lower = trimmed.toLowerCase();
+  if (lower.endsWith('/responses')) {
+    return trimmed;
+  }
+  if (lower.endsWith('/chat/completions')) {
+    return `${trimmed.slice(0, -('/chat/completions'.length))}/responses`;
+  }
+  if (lower.includes('/responses') || lower.includes('/chat/completions')) {
+    return trimmed;
+  }
+  return `${trimmed}/responses`;
+};
+
+const responsesTokenKey = (baseURL) => {
+  const host = parseHost(baseURL);
+  if (host === 'api.openai.com' || host === 'gmn.chuangzuoli.com') {
+    return 'max_output_tokens';
+  }
+  return 'max_tokens';
+};
+
+const normalizeTokenKey = (value) => {
+  if (value === 'max_output_tokens' || value === 'max_tokens' || value === '') {
+    return value;
+  }
+  return null;
+};
+
+const resolveResponsesTokenKeyOverride = (bodyText) => {
+  const normalized = String(bodyText || '').toLowerCase();
+  if (!normalized) return null;
+
+  if (
+    normalized.includes('unsupported parameter: max_output_tokens')
+    || normalized.includes('unknown parameter: max_output_tokens')
+    || normalized.includes('unknown field "max_output_tokens"')
+  ) {
+    return 'max_tokens';
+  }
+
+  if (
+    normalized.includes('unsupported parameter: max_tokens')
+    || normalized.includes('unknown parameter: max_tokens')
+    || normalized.includes('unknown field "max_tokens"')
+  ) {
+    return '';
+  }
+
+  return null;
+};
+
+const overrideResponsesTokenKey = (payload, tokenKey, fallback = 0) => {
+  const nextPayload = payload && typeof payload === 'object' ? { ...payload } : {};
+  let resolvedValue = fallback;
+  ['max_output_tokens', 'max_tokens'].forEach((key) => {
+    if (Number.isFinite(Number(nextPayload[key])) && Number(nextPayload[key]) > 0) {
+      resolvedValue = Number(nextPayload[key]);
+    }
+    delete nextPayload[key];
+  });
+  const normalizedKey = normalizeTokenKey(tokenKey);
+  if (normalizedKey) {
+    nextPayload[normalizedKey] = resolvedValue;
+  }
+  return nextPayload;
+};
+
+const extractTextFromUnknownContent = (value) => {
+  if (typeof value === 'string') return value.trim();
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => extractTextFromUnknownContent(item))
+      .filter(Boolean)
+      .join('\n')
+      .trim();
+  }
+  if (value && typeof value === 'object') {
+    if (typeof value.text === 'string') return value.text.trim();
+    if (typeof value.content === 'string') return value.content.trim();
+    if (Array.isArray(value.content)) return extractTextFromUnknownContent(value.content);
+    if (Array.isArray(value.parts)) return extractTextFromUnknownContent(value.parts);
+  }
+  return '';
+};
+
 const buildResponsesRequestPayload = ({
   model,
   messages,
   temperature,
   maxTokens,
   responseFormat,
-  stream
+  stream,
+  baseURL,
+  tokenKeyOverride
 }) => {
+  const tokenKey = normalizeTokenKey(tokenKeyOverride) ?? responsesTokenKey(baseURL);
   const payload = {
     model,
     input: buildResponsesInput(messages),
-    temperature,
-    max_output_tokens: maxTokens
+    temperature
   };
+
+  if (tokenKey && Number.isFinite(Number(maxTokens)) && Number(maxTokens) > 0) {
+    payload[tokenKey] = Number(maxTokens);
+  }
 
   if (stream) {
     payload.stream = true;
@@ -240,6 +350,18 @@ const extractResponsesText = (data) => {
     if (outputText) return outputText;
   }
 
+  const choiceText = extractTextFromUnknownContent(data?.choices?.[0]?.message?.content || data?.choices?.[0]?.text);
+  if (choiceText) {
+    return choiceText;
+  }
+
+  const candidateText = extractTextFromUnknownContent(
+    data?.candidates?.[0]?.content || data?.candidates?.[0]?.message || data?.candidates?.[0]?.output
+  );
+  if (candidateText) {
+    return candidateText;
+  }
+
   const chunks = [];
   const outputItems = Array.isArray(data?.output) ? data.output : [];
 
@@ -291,6 +413,11 @@ const normalizeResponsesFinishReason = (data) => {
 
 module.exports = {
   normalizeProtocol,
+  resolveResponsesEndpoint,
+  shouldForceResponsesStream,
+  responsesTokenKey,
+  resolveResponsesTokenKeyOverride,
+  overrideResponsesTokenKey,
   buildResponsesRequestPayload,
   extractResponsesText,
   normalizeResponsesFinishReason,

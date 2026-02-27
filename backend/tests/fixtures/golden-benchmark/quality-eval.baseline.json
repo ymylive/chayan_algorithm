@@ -1,0 +1,27 @@
+{
+  "fixtureVersion": "1.0",
+  "kpis": {
+    "relevance_precision": 1,
+    "authority_precision": 1,
+    "unsupported_claim_rate": 0.4,
+    "degraded_rate": 0.8
+  },
+  "thresholds": {
+    "relevance_precision": {
+      "minDelta": -0.05,
+      "maxDelta": 0
+    },
+    "authority_precision": {
+      "minDelta": -0.05,
+      "maxDelta": 0
+    },
+    "unsupported_claim_rate": {
+      "minDelta": -0.05,
+      "maxDelta": 0.1
+    },
+    "degraded_rate": {
+      "minDelta": -0.1,
+      "maxDelta": 0.1
+    }
+  }
+}

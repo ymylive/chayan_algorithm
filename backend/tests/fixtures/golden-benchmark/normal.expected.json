@@ -1,0 +1,18 @@
+{
+  "fixtureVersion": "1.0",
+  "scenarioId": "normal",
+  "expected": {
+    "outcome": "accept",
+    "degraded": false,
+    "confidenceBand": "high",
+    "topFindings": [
+      "Evidence coverage is broad across competitors, market, and financial dimensions",
+      "No major data-gap flags are expected"
+    ],
+    "dataGapFlags": {
+      "competitorsInsufficient": false,
+      "marketReferencesMissing": false,
+      "financialReferencesMissing": false
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "fixtureVersion": "1.0",
+  "scenarioId": "corrupt-expected",
+  "expected": {
+    "outcome": "accept",
+    "degraded": "false",
+    "confidenceBand": "certain",
+    "topFindings": [],
+    "dataGapFlags": {
+      "competitorsInsufficient": "no",
+      "marketReferencesMissing": false
+    }
+  }
+}

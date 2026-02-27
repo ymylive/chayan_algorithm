@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.2.0] - 2026-02-22
+
+### Added
+- 新增深度研究能力：`/api/research/deep`、`/api/research/progress/:jobId`、`/api/research/result/:jobId`，以及前端 `DeepResearch` 页面。
+- 新增 WebSocket 实时进度通道（`/ws/research`）与后端任务推送服务。
+- 新增研究任务与质量相关测试资产（deep research 测试、golden benchmark、quality eval harness）。
+- 新增企业用户隔离相关数据库变更（`enterprises.user_id` 字段、索引、外键）及迁移脚本。
+- 新增共享回退原因映射（`shared/mcp-fallback-reasons.json`）供前端质量提示复用。
+
+### Changed
+- 重构并增强 MCP 聚合检索与排序链路，支持 open-webSearch、Tavily、SearXNG、Crawl4AI、EDGAR 等多源策略与回退机制。
+- 增强 AI 分析服务质量门禁与遥测能力（quality contract、严格模式、部分失败可观测、运维提示）。
+- 更新 Docker 与 `.env.example` 默认配置：移除示例中的硬编码敏感值，补充 MCP/AI 新参数。
+- 前端 `AIAnalyze` 页面新增质量面板、MCP 健康状态和 TOPSIS 排名可视化增强。
+- CI 增加 `npm run test:quality-eval` 质量评测步骤。
+
+### Fixed
+- 修复深度研究链路在抓取失败场景下的降级与错误传播一致性问题。
+- 修复多源检索部分失败时前后端状态反馈不完整的问题（补充回退原因与来源信息）。
+
 ## [1.1.0] - 2026-02-13
 
 ### Added

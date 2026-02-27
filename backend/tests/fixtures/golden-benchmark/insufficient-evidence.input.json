@@ -1,0 +1,18 @@
+{
+  "fixtureVersion": "1.0",
+  "scenarioId": "insufficient-evidence",
+  "class": "insufficient_evidence",
+  "target": {
+    "name": "linghai-materials",
+    "industry": "new-materials"
+  },
+  "evidence": {
+    "competitors": [],
+    "marketReferences": [],
+    "financialReferences": []
+  },
+  "constraints": {
+    "offlineOnly": true,
+    "deterministicSeed": "seed-insufficient-001"
+  }
+}

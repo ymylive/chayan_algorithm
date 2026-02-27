@@ -1,0 +1,18 @@
+{
+  "fixtureVersion": "1.0",
+  "scenarioId": "low-evidence",
+  "expected": {
+    "outcome": "degrade",
+    "degraded": true,
+    "confidenceBand": "low",
+    "topFindings": [
+      "Coverage is partial and lacks robust financial support",
+      "Result should be produced in degraded confidence mode"
+    ],
+    "dataGapFlags": {
+      "competitorsInsufficient": true,
+      "marketReferencesMissing": false,
+      "financialReferencesMissing": true
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "fixtureVersion": "1.0",
+  "scenarioId": "noisy-adversarial",
+  "expected": {
+    "outcome": "degrade",
+    "degraded": true,
+    "confidenceBand": "medium",
+    "topFindings": [
+      "Adversarial or noisy evidence should be filtered out before final narrative",
+      "Residual evidence is still enough for a cautious degraded output"
+    ],
+    "dataGapFlags": {
+      "competitorsInsufficient": false,
+      "marketReferencesMissing": false,
+      "financialReferencesMissing": false
+    }
+  }
+}

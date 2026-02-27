@@ -49,6 +49,38 @@ describe('authController', () => {
     );
   });
 
+  test('register returns 500 when jsonwebtoken is unavailable', async () => {
+    jest.doMock('jsonwebtoken', () => {
+      throw new Error('module missing');
+    });
+
+    const { register } = require('../src/controllers/authController');
+    const req = { body: { email: 'user@example.com', password: 'P@ssw0rd!' } };
+    const res = buildRes();
+
+    await register(req, res);
+
+    expect(pool.query).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ success: false, message: 'Authentication service unavailable' })
+    );
+  });
+
+  test('register returns 500 when JWT secret is missing', async () => {
+    const { register } = require('../src/controllers/authController');
+    const req = { body: { email: 'user@example.com', password: 'P@ssw0rd!' } };
+    const res = buildRes();
+
+    await register(req, res);
+
+    expect(pool.query).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ success: false, message: 'JWT_SECRET is not configured' })
+    );
+  });
+
   test('register returns 409 for duplicate email conflict', async () => {
     process.env.JWT_SECRET = 'secret';
     pool.query.mockRejectedValueOnce({ code: '23505', constraint: 'idx_users_email_lower_unique' });

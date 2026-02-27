@@ -4,9 +4,15 @@ const fs = require('fs');
 const path = require('path');
 const logger = require('../config/logger');
 const redis = require('../config/redis');
+const { toBoolean, parsePositiveInt } = require('../utils/coercion');
 const { normalizeList, extractDisplayLabel, uniqueNonEmpty } = require('../utils/math');
 const {
   normalizeProtocol,
+  resolveResponsesEndpoint,
+  shouldForceResponsesStream,
+  responsesTokenKey,
+  resolveResponsesTokenKeyOverride,
+  overrideResponsesTokenKey,
   buildResponsesRequestPayload,
   extractResponsesText,
   normalizeResponsesFinishReason,
@@ -17,23 +23,257 @@ const {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const ANALYSIS_PROMPT_VERSION = 'market-intel-v2.1';
 const SETTINGS_FILE = path.join(__dirname, '../../data/ai-settings.json');
+const PERSISTED_SETTINGS_CACHE_TTL_MS = 1000;
 
-const toBoolean = (value, defaultValue = false) => {
-  if (typeof value === 'boolean') return value;
-  if (typeof value === 'number') return value !== 0;
-  if (typeof value === 'string') {
-    const normalized = value.trim().toLowerCase();
-    if (!normalized) return defaultValue;
-    if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
-    if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+const resolveQualityFlags = (config = {}) => ({
+  qualityContractEnabled: toBoolean(config.qualityContractEnabled, true),
+  qualityStrictMode: toBoolean(config.qualityStrictMode, false),
+  qualityMinCoverageSources: parsePositiveInt(config.qualityMinCoverageSources, 2, 12),
+  version: typeof config.qualityPolicyVersion === 'string' && config.qualityPolicyVersion.trim()
+    ? config.qualityPolicyVersion.trim().slice(0, 80)
+    : 'quality-policy-v1'
+});
+
+const emitQualityTelemetry = (eventName, payload) => {
+  if (typeof logger.emitQualityEvent === 'function') {
+    return logger.emitQualityEvent(eventName, payload);
   }
-  return defaultValue;
+  logger.info('quality_event', {
+    eventName,
+    eventVersion: '1.0',
+    timestamp: new Date().toISOString(),
+    ...payload
+  });
+  return null;
 };
 
-const parsePositiveInt = (value, fallback, max = Number.MAX_SAFE_INTEGER) => {
-  const parsed = Number.parseInt(String(value ?? ''), 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
-  return Math.min(parsed, max);
+const buildSafeErrorPayload = (err, fallbackStatus = 0) => ({
+  status: Number.parseInt(String(err?.status || fallbackStatus), 10) || fallbackStatus,
+  limitHint: String(err?.limitHint || '').slice(0, 120) || null,
+  retryAfterSec: parsePositiveInt(err?.retryAfterSec, 0, 600),
+  message: String(err?.message || 'unknown_error').slice(0, 200)
+});
+
+const CLAIM_SUPPORT_REPAIR_MAX_ATTEMPTS = 1;
+const CLAIM_SUPPORT_MAX_UNSUPPORTED_SAMPLES = 3;
+const CLAIM_SUPPORT_MIN_CLAIM_LENGTH = 8;
+const CLAIM_SIGNAL_PATTERN = /(\d|%|同比|增长|下降|排名|市场|营收|利润|报告|数据显示|according|source|forecast|estimate)/i;
+const CLAIM_HYPOTHESIS_TAG_PATTERN = /(?:\[\s*(?:hypothesis|假设)\s*\]|【\s*假设\s*】)/i;
+const CLAIM_INFERENCE_TAG_PATTERN = /(?:\[\s*(?:inference|\u63a8\u65ad)\s*\]|【\s*\u63a8\u65ad\s*】)/i;
+const CLAIM_TEMPLATE_INSTRUCTION_PATTERN = /(?:\u8bc4\u5206\u89c4\u5219|\u53ef\u590d\u73b0|\u8f93\u51fa\u683c\u5f0f|\u81f3\u5c11\d+\s*[\u6761\u4e2a]|\u542b\u9002\u7528\u573a\u666f|\u540c\u884c\u5bf9\u6807\u53ef\u6267\u884c\u7b56\u7565|(?:^|[\-\u2022]\s*)\u7b56\u7565\s*\d+\s*[:\uff1a]|(?:^|[\-\u2022]\s*)\u9009\u9879\s*[A-Da-d\uff21-\uff24\uff41-\uff44\u2460-\u2463\d]+\s*[:\uff1a]|(?:^|[\-\u2022]\s*)(?:\u52a8\u4f5c|\u8d1f\u8d23\u4eba|\u8d44\u6e90|kpi|\u91cc\u7a0b\u7891|\u5efa\u8bae\u52a8\u4f5c)\s*[:\uff1a]|(?:^|[\-\u2022]\s*)(?:\u5f71\u54cd|\u53ef\u884c\u6027|\u6210\u672c|\u98ce\u9669)\s*\d+|(?:^|[\-\u2022]\s*)\u6e20\u9053\u6570\u636e\s*[:\uff1a]|^p[0-3]\b(?:\s*[\(\uff08].*)?$|scoring\s*rule|output\s*format|at\s+least\s+\d+|(?:^|[\-\u2022]\s*)option\s*[A-Da-d1-4]\s*:|(?:^|[\-\u2022]\s*)(?:action|owner|resource|milestone|kpi|recommended\s+action)\s*:|(?:^|[\-\u2022]\s*)(?:impact|feasibility|cost|risk)\s*\d+|(?:^|[\-\u2022]\s*)channel\s+data\s*:)/i;
+const CLAIM_PLACEHOLDER_REFERENCE_PATTERN = /`[^`]*(?:peers?|externalEvidence|marketReport|financialData|industryData|competitorData|modelResult|uploaded)[^`]*`/i;
+const CLAIM_SECTION_LINE_PATTERN = /^\s*(?:#{1,6}\s+|(?:\d+|[一二三四五六七八九十]{1,3})(?:[.)]|、)\s*)/;
+const CLAIM_SECTION_KEYWORDS = [
+  '高管摘要',
+  '关键洞察',
+  '模型结果解读',
+  '竞品',
+  '战略选项',
+  '行动路线',
+  '数据缺口',
+  'executive summary',
+  'key insights',
+  'model interpretation',
+  'competitive benchmark',
+  'strategy options',
+  'roadmap',
+  'data gaps'
+];
+
+const normalizeClaimText = (value) => String(value || '')
+  .toLowerCase()
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const isClaimSupportStructuralNoise = (value) => {
+  const line = String(value || '').trim();
+  if (!line) return true;
+  if (/^```/.test(line)) return true;
+  if (line.startsWith('**') && line.endsWith('**')) return true;
+  if (/^\*{1,2}[^*]{1,80}\*{1,2}[:：]?$/.test(line)) return true;
+  if (CLAIM_HYPOTHESIS_TAG_PATTERN.test(line)) return true;
+  if (CLAIM_TEMPLATE_INSTRUCTION_PATTERN.test(line)) return true;
+  if (CLAIM_PLACEHOLDER_REFERENCE_PATTERN.test(line)) return true;
+
+  const normalized = normalizeClaimText(line);
+  if (!normalized) return true;
+
+  if (CLAIM_SECTION_LINE_PATTERN.test(line)) {
+    const hitSectionKeyword = CLAIM_SECTION_KEYWORDS.some((keyword) => normalized.includes(keyword));
+    const hasSentencePunctuation = /[。！？!?]/.test(line);
+    if (hitSectionKeyword || !hasSentencePunctuation) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+const isClaimSupportInferenceLine = (value) => {
+  const line = String(value || '').trim();
+  if (!line) return false;
+  return CLAIM_INFERENCE_TAG_PATTERN.test(line);
+};
+
+const addEvidenceAnchor = (anchorSet, value) => {
+  const normalized = normalizeClaimText(value);
+  if (!normalized || normalized.length < 2) return;
+  anchorSet.add(normalized.slice(0, 140));
+  normalized
+    .split(/[^a-z0-9\u4e00-\u9fff]+/i)
+    .filter((token) => token.length >= 2)
+    .slice(0, 8)
+    .forEach((token) => {
+      anchorSet.add(token);
+    });
+};
+
+const collectEvidenceAnchors = (payload = {}) => {
+  const anchors = new Set();
+  const addList = (items, mapper) => {
+    normalizeList(items).forEach((item) => {
+      const values = mapper(item);
+      values.forEach((value) => {
+        addEvidenceAnchor(anchors, value);
+      });
+    });
+  };
+
+  addEvidenceAnchor(anchors, payload?.target);
+  normalizeList(payload?.industryNames).forEach((item) => {
+    addEvidenceAnchor(anchors, item);
+  });
+  normalizeList(payload?.competitorNames).forEach((item) => {
+    addEvidenceAnchor(anchors, item);
+  });
+  normalizeList(payload?.keyFindings).forEach((item) => {
+    addEvidenceAnchor(anchors, item);
+  });
+
+  addList(payload?.peers, (item) => [item?.name, item?.industry]);
+  addList(payload?.peerResearch, (item) => [item?.name, item?.source, item?.summary, item?.description]);
+  addList(payload?.marketReport?.references, (item) => [item?.name, item?.summary, item?.description, item?.url]);
+  addList(payload?.financialData?.references, (item) => [item?.name, item?.summary, item?.description, item?.url]);
+
+  return anchors;
+};
+
+const normalizeCompetitorName = (value) => String(value || '')
+  .replace(/["'`]/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const parseCompetitorCandidatesFromText = (text, maxCandidates = 8) => {
+  const rawText = String(text || '').trim();
+  if (!rawText) return [];
+
+  const candidateBuckets = [];
+  const codeBlockMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (codeBlockMatch?.[1]) {
+    candidateBuckets.push(codeBlockMatch[1].trim());
+  }
+  candidateBuckets.push(rawText);
+
+  const parsedNames = [];
+  candidateBuckets.forEach((candidate) => {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((item) => {
+          const name = typeof item === 'string'
+            ? item
+            : (item?.name || item?.company || item?.brand || '');
+          if (name) parsedNames.push(name);
+        });
+        return;
+      }
+
+      const list = parsed?.competitors || parsed?.companies || parsed?.items || [];
+      if (Array.isArray(list)) {
+        list.forEach((item) => {
+          const name = typeof item === 'string'
+            ? item
+            : (item?.name || item?.company || item?.brand || '');
+          if (name) parsedNames.push(name);
+        });
+      }
+    } catch {
+      // Non-JSON fallback handled below.
+    }
+  });
+
+  if (parsedNames.length === 0) {
+    rawText
+      .split(/[\n,;|]/)
+      .map((item) => item.replace(/^\s*[-*0-9.)]+\s*/, '').trim())
+      .filter(Boolean)
+      .forEach((item) => parsedNames.push(item));
+  }
+
+  return uniqueNonEmpty(parsedNames.map(normalizeCompetitorName))
+    .filter((name) => name.length >= 2 && name.length <= 60)
+    .slice(0, Math.max(1, maxCandidates));
+};
+
+const buildClaimSupportMetrics = (text, payload) => {
+  const normalizedText = String(text || '');
+  const evidenceAnchors = collectEvidenceAnchors(payload);
+  const filteredClaims = normalizedText
+    .split(/[。！？!?;\n]/)
+    .map((item) => item.trim())
+    .filter((item) => item.length >= CLAIM_SUPPORT_MIN_CLAIM_LENGTH)
+    .filter((item) => !isClaimSupportStructuralNoise(item))
+    .filter((item) => CLAIM_SIGNAL_PATTERN.test(item));
+  const inferenceClaims = filteredClaims.filter((item) => isClaimSupportInferenceLine(item));
+  const claims = filteredClaims.filter((item) => !isClaimSupportInferenceLine(item));
+
+  if (evidenceAnchors.size === 0) {
+    return {
+      validationSkipped: true,
+      skipReason: 'no_evidence_anchors',
+      evidenceAnchorCount: 0,
+      totalClaims: claims.length,
+      supportedClaims: 0,
+      unsupportedClaims: 0,
+      supportRatio: 1,
+      inferenceClaimCount: inferenceClaims.length,
+      inferenceSamples: inferenceClaims.slice(0, CLAIM_SUPPORT_MAX_UNSUPPORTED_SAMPLES).map((item) => item.slice(0, 180)),
+      unsupportedSamples: []
+    };
+  }
+
+  let supportedClaims = 0;
+  const unsupportedSamples = [];
+
+  claims.forEach((claim) => {
+    const normalizedClaim = normalizeClaimText(claim);
+    const supported = Array.from(evidenceAnchors).some((anchor) => (
+      anchor.length >= 2 && normalizedClaim.includes(anchor)
+    ));
+    if (supported) {
+      supportedClaims += 1;
+      return;
+    }
+    if (unsupportedSamples.length < CLAIM_SUPPORT_MAX_UNSUPPORTED_SAMPLES) {
+      unsupportedSamples.push(claim.slice(0, 180));
+    }
+  });
+
+  const totalClaims = claims.length;
+  const unsupportedClaims = Math.max(0, totalClaims - supportedClaims);
+  const supportRatio = totalClaims === 0 ? 1 : Number((supportedClaims / totalClaims).toFixed(4));
+
+  return {
+    validationSkipped: false,
+    evidenceAnchorCount: evidenceAnchors.size,
+    totalClaims,
+    supportedClaims,
+    unsupportedClaims,
+    supportRatio,
+    inferenceClaimCount: inferenceClaims.length,
+    inferenceSamples: inferenceClaims.slice(0, CLAIM_SUPPORT_MAX_UNSUPPORTED_SAMPLES).map((item) => item.slice(0, 180)),
+    unsupportedSamples
+  };
 };
 
 
@@ -88,6 +328,36 @@ const RESPONSES_MCP_TOOL_DEFINITIONS = [
         company: { type: 'string', minLength: 1 }
       },
       required: ['company'],
+      additionalProperties: false
+    }
+  },
+  {
+    type: 'function',
+    name: 'fetch_regulatory_filings',
+    description: 'Fetch regulatory filing references for a company',
+    parameters: {
+      type: 'object',
+      properties: {
+        company: { type: 'string', minLength: 1 },
+        ticker: { type: 'string' },
+        timeframe: { type: 'string' }
+      },
+      required: ['company'],
+      additionalProperties: false
+    }
+  },
+  {
+    type: 'function',
+    name: 'fetch_news_stream',
+    description: 'Fetch ranked news stream references for a query',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', minLength: 1 },
+        timeframe: { type: 'string' },
+        limit: { type: 'integer', minimum: 1, maximum: 20 }
+      },
+      required: ['query'],
       additionalProperties: false
     }
   }
@@ -243,6 +513,29 @@ const extractMcpPayload = (result) => {
   return result;
 };
 
+const stableJsonStringify = (value) => {
+  const normalize = (input) => {
+    if (Array.isArray(input)) {
+      return input.map((item) => normalize(item));
+    }
+    if (input && typeof input === 'object') {
+      return Object.keys(input)
+        .sort()
+        .reduce((acc, key) => {
+          acc[key] = normalize(input[key]);
+          return acc;
+        }, {});
+    }
+    return input;
+  };
+
+  try {
+    return JSON.stringify(normalize(value));
+  } catch {
+    return JSON.stringify(String(value || ''));
+  }
+};
+
 const ANALYSIS_SYSTEM_PROMPT = `# 角色：AI市场分析专家（Market Intelligence & Strategy Analyst）
 你是咨询顾问合伙人级别的市场分析专家。基于输入数据完成：多维市场分析 + 竞品对标 + 可执行增长建议。
 
@@ -272,29 +565,152 @@ const ANALYSIS_SYSTEM_PROMPT = `# 角色：AI市场分析专家（Market Intelli
 class AIService {
   constructor() {
     this.mcpClient = null;
+    this.persistedSettingsCache = {
+      value: {},
+      fileMtimeMs: 0,
+      expiresAt: 0,
+      hasValue: false
+    };
   }
 
   readPersistedSettings() {
+    const now = Date.now();
+    if (this.persistedSettingsCache.hasValue && now < this.persistedSettingsCache.expiresAt) {
+      return this.persistedSettingsCache.value;
+    }
+
     try {
-      if (!fs.existsSync(SETTINGS_FILE)) {
-        return {};
+      const stats = fs.statSync(SETTINGS_FILE);
+      const fileMtimeMs = Number.isFinite(stats.mtimeMs) ? stats.mtimeMs : 0;
+
+      if (
+        this.persistedSettingsCache.hasValue
+        && this.persistedSettingsCache.fileMtimeMs === fileMtimeMs
+      ) {
+        this.persistedSettingsCache.expiresAt = now + PERSISTED_SETTINGS_CACHE_TTL_MS;
+        return this.persistedSettingsCache.value;
       }
 
       const raw = fs.readFileSync(SETTINGS_FILE, 'utf8');
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        this.persistedSettingsCache = {
+          value: parsed,
+          fileMtimeMs,
+          expiresAt: now + PERSISTED_SETTINGS_CACHE_TTL_MS,
+          hasValue: true
+        };
         return parsed;
       }
+
+      this.persistedSettingsCache = {
+        value: {},
+        fileMtimeMs,
+        expiresAt: now + PERSISTED_SETTINGS_CACHE_TTL_MS,
+        hasValue: true
+      };
     } catch (err) {
+      if (err?.code === 'ENOENT') {
+        this.persistedSettingsCache = {
+          value: {},
+          fileMtimeMs: 0,
+          expiresAt: now + PERSISTED_SETTINGS_CACHE_TTL_MS,
+          hasValue: true
+        };
+        return {};
+      }
+
       logger.warn('Failed to read persisted AI settings:', err?.message || err);
+      this.persistedSettingsCache = {
+        value: {},
+        fileMtimeMs: 0,
+        expiresAt: now + PERSISTED_SETTINGS_CACHE_TTL_MS,
+        hasValue: true
+      };
     }
     return {};
   }
 
-  getAIConfig() {
+  normalizeConfigOverride(override) {
+    if (!override || typeof override !== 'object') return null;
+
+    const normalized = {};
+    if (typeof override.apiEndpoint === 'string' && override.apiEndpoint.trim()) {
+      normalized.baseURL = override.apiEndpoint.trim().replace(/\/+$/, '');
+    }
+    if (typeof override.apiKey === 'string') {
+      normalized.apiKey = override.apiKey;
+    }
+    if (typeof override.model === 'string' && override.model.trim()) {
+      normalized.model = override.model.trim();
+    }
+    if (typeof override.fallbackModel === 'string' && override.fallbackModel.trim()) {
+      normalized.fallbackModel = override.fallbackModel.trim();
+    }
+    if (override.protocol !== undefined) {
+      normalized.protocol = normalizeProtocol(override.protocol);
+    }
+    if (override.modelFallbacks !== undefined) {
+      normalized.modelFallbacks = uniqueNonEmpty(
+        (Array.isArray(override.modelFallbacks)
+          ? override.modelFallbacks
+          : String(override.modelFallbacks || '').split(','))
+          .map((item) => String(item || '').trim())
+      );
+    }
+    if (typeof override.secondaryApiEndpoint === 'string') {
+      normalized.secondaryBaseURL = override.secondaryApiEndpoint.trim().replace(/\/+$/, '');
+    }
+    if (typeof override.secondaryApiKey === 'string') {
+      normalized.secondaryApiKey = override.secondaryApiKey;
+    }
+    if (typeof override.secondaryModel === 'string') {
+      normalized.secondaryModel = override.secondaryModel.trim();
+    }
+    if (override.secondaryProtocol !== undefined) {
+      normalized.secondaryProtocol = normalizeProtocol(override.secondaryProtocol);
+    }
+    if (typeof override.tertiaryApiEndpoint === 'string') {
+      normalized.tertiaryBaseURL = override.tertiaryApiEndpoint.trim().replace(/\/+$/, '');
+    }
+    if (typeof override.tertiaryApiKey === 'string') {
+      normalized.tertiaryApiKey = override.tertiaryApiKey;
+    }
+    if (typeof override.tertiaryModel === 'string') {
+      normalized.tertiaryModel = override.tertiaryModel.trim();
+    }
+    if (override.tertiaryProtocol !== undefined) {
+      normalized.tertiaryProtocol = normalizeProtocol(override.tertiaryProtocol);
+    }
+    if (Number.isFinite(Number(override.temperature))) {
+      normalized.temperature = Number(override.temperature);
+    }
+    if (Number.isFinite(Number(override.maxTokens))) {
+      normalized.maxTokens = Number(override.maxTokens);
+    }
+    if (typeof override.useMock === 'boolean') {
+      normalized.useMock = override.useMock;
+    }
+    if (override.qualityContractEnabled !== undefined) {
+      normalized.qualityContractEnabled = toBoolean(override.qualityContractEnabled, true);
+    }
+    if (override.qualityStrictMode !== undefined) {
+      normalized.qualityStrictMode = toBoolean(override.qualityStrictMode, false);
+    }
+    if (override.qualityMinCoverageSources !== undefined) {
+      normalized.qualityMinCoverageSources = parsePositiveInt(override.qualityMinCoverageSources, 2, 12);
+    }
+    if (typeof override.qualityPolicyVersion === 'string' && override.qualityPolicyVersion.trim()) {
+      normalized.qualityPolicyVersion = override.qualityPolicyVersion.trim().slice(0, 80);
+    }
+
+    return normalized;
+  }
+
+  getAIConfig(configOverride = null) {
     const persisted = this.readPersistedSettings();
-    const baseURL = String(process.env.AI_BASE_URL || persisted.apiEndpoint || 'https://gmn.chuangzuoli.com/v1').replace(/\/+$/, '');
-    const apiKey = process.env.AI_API_KEY || persisted.apiKey || '';
+    const baseURL = String(process.env.AI_BASE_URL || persisted.apiEndpoint || 'https://gmn.chuangzuoli.com/v1/responses').replace(/\/+$/, '');
+    const apiKey = process.env.AI_API_KEY || persisted.apiKey || 'sk-dff5b9f31c0e7ae501b74cf57f9d3887964fa6d7cf94e255209ad495611344b0';
     const model = process.env.AI_MODEL || persisted.model || 'gpt-5.2';
     const fallbackModel = process.env.AI_FALLBACK_MODEL || persisted.fallbackModel || model;
     const protocol = normalizeProtocol(process.env.AI_PROTOCOL || persisted.protocol || 'responses');
@@ -310,9 +726,25 @@ class AIService {
     const useMock = toBoolean(process.env.AI_USE_MOCK, toBoolean(persisted.useMock, false));
     const aiRequestTimeoutMs = parsePositiveInt(process.env.AI_REQUEST_TIMEOUT_MS, 85000, 180000);
     const aiNarrativeTotalTimeoutMs = parsePositiveInt(process.env.AI_NARRATIVE_TOTAL_TIMEOUT_MS, 110000, 300000);
-    const mcpToolTimeoutMs = parsePositiveInt(process.env.MCP_TOOL_TIMEOUT_MS, 12000, 60000);
+    const mcpToolTimeoutMs = parsePositiveInt(process.env.MCP_TOOL_TIMEOUT_MS, 12000, 240000);
     const aiRetryMaxAttempts = parsePositiveInt(process.env.AI_RETRY_MAX_ATTEMPTS, 2, 4);
     const aiRetryBaseDelayMs = parsePositiveInt(process.env.AI_RETRY_BASE_DELAY_MS, 1000, 10000);
+    const qualityContractEnabled = toBoolean(
+      process.env.AI_QUALITY_CONTRACT_ENABLED,
+      toBoolean(persisted.qualityContractEnabled, true)
+    );
+    const qualityStrictMode = toBoolean(
+      process.env.AI_QUALITY_STRICT_MODE,
+      toBoolean(persisted.qualityStrictMode, false)
+    );
+    const qualityMinCoverageSources = parsePositiveInt(
+      process.env.AI_QUALITY_MIN_COVERAGE_SOURCES,
+      parsePositiveInt(persisted.qualityMinCoverageSources, 2, 12),
+      12
+    );
+    const qualityPolicyVersion = String(
+      process.env.AI_QUALITY_POLICY_VERSION || persisted.qualityPolicyVersion || 'quality-policy-v1'
+    ).trim().slice(0, 80) || 'quality-policy-v1';
 
     const secondaryBaseURL = String(
       process.env.AI_SECONDARY_BASE_URL || persisted.secondaryApiEndpoint || ''
@@ -331,7 +763,7 @@ class AIService {
       process.env.AI_TERTIARY_PROTOCOL || persisted.tertiaryProtocol || 'chat_completions'
     );
 
-    return {
+    const resolved = {
       baseURL,
       apiKey,
       model,
@@ -346,6 +778,10 @@ class AIService {
       mcpToolTimeoutMs,
       aiRetryMaxAttempts,
       aiRetryBaseDelayMs,
+      qualityContractEnabled,
+      qualityStrictMode,
+      qualityMinCoverageSources,
+      qualityPolicyVersion,
       secondaryBaseURL,
       secondaryApiKey,
       secondaryModel,
@@ -356,6 +792,18 @@ class AIService {
       tertiaryProtocol,
       temperature: Number.isFinite(temperature) ? temperature : 0.35,
       maxTokens: Number.isFinite(maxTokens) && maxTokens > 0 ? maxTokens : 1400
+    };
+
+    const override = this.normalizeConfigOverride(configOverride);
+    if (!override) return resolved;
+
+    return {
+      ...resolved,
+      ...override,
+      protocol: override.protocol || resolved.protocol,
+      secondaryProtocol: override.secondaryProtocol || resolved.secondaryProtocol,
+      tertiaryProtocol: override.tertiaryProtocol || resolved.tertiaryProtocol,
+      modelFallbacks: Array.isArray(override.modelFallbacks) ? override.modelFallbacks : resolved.modelFallbacks
     };
   }
 
@@ -384,6 +832,137 @@ class AIService {
 
   buildMockFinancialData(params) {
     return { company: params.company, revenue: 1000000, profit: 50000 };
+  }
+
+  buildMockRegulatoryFilings(params = {}) {
+    const company = String(params?.company || '').trim();
+    const ticker = String(params?.ticker || '').trim();
+    const timeframe = String(params?.timeframe || '').trim() || 'latest';
+    return {
+      company,
+      ...(ticker ? { ticker } : {}),
+      timeframe,
+      filings: [],
+      meta: {
+        source: 'mcp_mock_empty',
+        partialFailure: true
+      }
+    };
+  }
+
+  buildMockNewsStream(params = {}) {
+    const query = String(params?.query || '').trim();
+    const timeframe = String(params?.timeframe || '').trim() || 'latest';
+    const limit = parsePositiveInt(params?.limit, 10, 20);
+    return {
+      query,
+      timeframe,
+      news: [],
+      meta: {
+        limit,
+        source: 'mcp_mock_empty',
+        partialFailure: true
+      }
+    };
+  }
+
+  buildMcpFallbackPayload(toolName, args, reason = 'mcp_unavailable') {
+    const query = typeof args === 'string' ? args : (args?.query || '');
+
+    if (toolName === 'search_industry') {
+      return {
+        query,
+        results: [],
+        meta: {
+          source: 'mcp_fallback_empty',
+          partialFailure: true,
+          reason
+        }
+      };
+    }
+
+    if (toolName === 'search_competitors') {
+      return {
+        query,
+        competitors: [],
+        meta: {
+          sourceCounts: {},
+          sourcesUsed: [],
+          partialFailure: true,
+          reason
+        }
+      };
+    }
+
+    if (toolName === 'fetch_market_report') {
+      return {
+        industry: String(args?.industry || args?.query || '').trim(),
+        timeframe: String(args?.timeframe || 'latest'),
+        report: 'No market references available from MCP fallback.',
+        references: [],
+        meta: {
+          source: 'mcp_fallback_empty',
+          partialFailure: true,
+          reason
+        }
+      };
+    }
+
+    if (toolName === 'fetch_financial_data') {
+      return {
+        company: String(args?.company || '').trim(),
+        repoCount: 0,
+        indicators: {
+          totalSignals: 0,
+          developerAttentionScore: 0
+        },
+        references: [],
+        meta: {
+          source: 'mcp_fallback_empty',
+          partialFailure: true,
+          reason
+        }
+      };
+    }
+
+    if (toolName === 'fetch_regulatory_filings') {
+      const company = String(args?.company || '').trim();
+      const ticker = String(args?.ticker || '').trim();
+      return {
+        company,
+        ...(ticker ? { ticker } : {}),
+        timeframe: String(args?.timeframe || '').trim() || 'latest',
+        filings: [],
+        meta: {
+          source: 'mcp_fallback_empty',
+          partialFailure: true,
+          reason
+        }
+      };
+    }
+
+    if (toolName === 'fetch_news_stream') {
+      return {
+        query: String(query || '').trim(),
+        timeframe: String(args?.timeframe || '').trim() || 'latest',
+        news: [],
+        meta: {
+          limit: parsePositiveInt(args?.limit, 10, 20),
+          source: 'mcp_fallback_empty',
+          partialFailure: true,
+          reason
+        }
+      };
+    }
+
+    return {
+      query,
+      meta: {
+        source: 'mcp_fallback_empty',
+        partialFailure: true,
+        reason
+      }
+    };
   }
 
   buildNarrativeFallback(input) {
@@ -566,6 +1145,47 @@ class AIService {
       };
     }
 
+    if (toolName === 'fetch_regulatory_filings') {
+      const company = sanitizeToolString(parsedArguments.company, 'company', { required: true, maxLen: 200 });
+      const ticker = sanitizeToolString(parsedArguments.ticker, 'ticker', { required: false, maxLen: 50 });
+      const timeframe = sanitizeToolString(parsedArguments.timeframe, 'timeframe', { required: false, maxLen: 100 });
+      return {
+        company,
+        ...(ticker ? { ticker } : {}),
+        ...(timeframe ? { timeframe } : {})
+      };
+    }
+
+    if (toolName === 'fetch_news_stream') {
+      const query = sanitizeToolString(parsedArguments.query, 'query', { required: true, maxLen: 200 });
+      const timeframe = sanitizeToolString(parsedArguments.timeframe, 'timeframe', { required: false, maxLen: 100 });
+      let limit;
+      const rawLimit = parsedArguments.limit;
+      if (rawLimit !== undefined && rawLimit !== null) {
+        if (typeof rawLimit === 'number') {
+          limit = rawLimit;
+        } else if (typeof rawLimit === 'string') {
+          const trimmedLimit = rawLimit.trim();
+          if (!/^\d+$/.test(trimmedLimit)) {
+            throw createInvalidToolCallError('Tool `fetch_news_stream` optional `limit` must be a number');
+          }
+          limit = Number.parseInt(trimmedLimit, 10);
+        } else {
+          throw createInvalidToolCallError('Tool `fetch_news_stream` optional `limit` must be a number');
+        }
+
+        if (!Number.isInteger(limit) || limit < 1 || limit > 20) {
+          throw createInvalidToolCallError('Tool `fetch_news_stream` optional `limit` must be an integer between 1 and 20');
+        }
+      }
+
+      return {
+        query,
+        ...(timeframe ? { timeframe } : {}),
+        ...(limit !== undefined ? { limit } : {})
+      };
+    }
+
     throw createInvalidToolCallError(`Unsupported tool: ${toolName}`);
   }
 
@@ -586,6 +1206,63 @@ class AIService {
       name,
       arguments: toolArguments
     };
+  }
+
+  coerceMcpToolPayload(toolName, payload, args, options = {}) {
+    const fallbackOnInvalid = options.fallbackOnInvalid !== false;
+    const normalized = payload && typeof payload === 'object' && !Array.isArray(payload)
+      ? payload
+      : null;
+
+    if (!normalized) {
+      return fallbackOnInvalid ? this.buildMcpFallbackPayload(toolName, args, 'mcp_payload_invalid') : null;
+    }
+
+    let valid = false;
+    let normalizedPayload = normalized;
+    if (toolName === 'search_industry') {
+      valid = Array.isArray(normalized.results);
+    } else if (toolName === 'search_competitors') {
+      valid = Array.isArray(normalized.competitors);
+    } else if (toolName === 'fetch_market_report') {
+      valid = Array.isArray(normalized.references);
+    } else if (toolName === 'fetch_financial_data') {
+      valid = Array.isArray(normalized.references);
+    } else if (toolName === 'fetch_regulatory_filings') {
+      if (Array.isArray(normalized.filings)) {
+        valid = true;
+      } else if (Array.isArray(normalized.references)) {
+        valid = true;
+        normalizedPayload = {
+          ...normalized,
+          filings: normalized.references
+        };
+      }
+    } else if (toolName === 'fetch_news_stream') {
+      if (Array.isArray(normalized.news)) {
+        valid = true;
+      } else if (Array.isArray(normalized.references)) {
+        valid = true;
+        normalizedPayload = {
+          ...normalized,
+          news: normalized.references.map((item) => ({
+            title: item?.title || item?.name || '',
+            url: item?.url || '',
+            summary: item?.summary || item?.description || '',
+            source: item?.source,
+            relevanceScore: item?.relevanceScore,
+            baseRelevanceScore: item?.baseRelevanceScore,
+            authority: item?.authority,
+            reasonCodes: item?.reasonCodes
+          }))
+        };
+      }
+    } else {
+      valid = true;
+    }
+
+    if (valid) return normalizedPayload;
+    return fallbackOnInvalid ? this.buildMcpFallbackPayload(toolName, args, 'mcp_payload_invalid') : null;
   }
 
   async dispatchResponsesToolCall(toolCall) {
@@ -609,7 +1286,19 @@ class AIService {
         `MCP tool ${validated.name} timeout`
       );
 
-      const normalizedPayload = extractMcpPayload(rawResult);
+      const extractedPayload = extractMcpPayload(rawResult);
+      const normalizedPayload = this.coerceMcpToolPayload(
+        validated.name,
+        extractedPayload,
+        validated.arguments,
+        { fallbackOnInvalid: false }
+      );
+      if (!normalizedPayload) {
+        const invalidPayloadErr = new Error(`MCP tool ${validated.name} returned invalid payload`);
+        invalidPayloadErr.status = 502;
+        invalidPayloadErr.limitHint = 'mcp_payload_invalid';
+        throw invalidPayloadErr;
+      }
       return {
         callId: validated.callId,
         name: validated.name,
@@ -636,6 +1325,17 @@ class AIService {
       return rawText ? JSON.parse(rawText) : {};
     } catch {
       return { raw: rawText };
+    }
+  }
+
+  buildResponsesErrorBodyText(data) {
+    if (typeof data?.raw === 'string') {
+      return data.raw;
+    }
+    try {
+      return JSON.stringify(data || {});
+    } catch {
+      return String(data || '');
     }
   }
 
@@ -668,46 +1368,67 @@ class AIService {
   }
 
   async callResponsesJsonTurn({
-    resolvedBaseURL,
+    responsesEndpoint,
     providerHeaders,
     requestPayload,
     timeoutMs,
-    model
+    model,
+    maxTokens
   }) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    let response;
-    try {
-      response = await fetch(`${resolvedBaseURL}/responses`, {
-        method: 'POST',
-        headers: providerHeaders,
-        body: JSON.stringify(requestPayload),
-        signal: controller.signal
-      });
-    } catch (err) {
-      if (err?.name === 'AbortError') {
-        const timeoutErr = new Error(`AI gateway timeout after ${timeoutMs}ms`);
-        timeoutErr.status = 504;
-        throw timeoutErr;
+    let retriedTokenOverride = false;
+    let nextPayload = requestPayload;
+
+    while (true) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      let response;
+      try {
+        response = await fetch(responsesEndpoint, {
+          method: 'POST',
+          headers: providerHeaders,
+          body: JSON.stringify(nextPayload),
+          signal: controller.signal
+        });
+      } catch (err) {
+        if (err?.name === 'AbortError') {
+          const timeoutErr = new Error(`AI gateway timeout after ${timeoutMs}ms`);
+          timeoutErr.status = 504;
+          throw timeoutErr;
+        }
+        throw err;
+      } finally {
+        clearTimeout(timer);
       }
-      throw err;
-    } finally {
-      clearTimeout(timer);
-    }
 
-    const data = await this.parseJsonResponseBody(response);
-    if (!response.ok) {
-      throw this.buildResponsesHttpError(response, data);
-    }
-    this.assertNoResponsesPayloadError(data);
+      const data = await this.parseJsonResponseBody(response);
+      if (!response.ok) {
+        if (response.status === 400 && !retriedTokenOverride) {
+          const overrideKey = resolveResponsesTokenKeyOverride(this.buildResponsesErrorBodyText(data));
+          if (overrideKey !== null) {
+            retriedTokenOverride = true;
+            nextPayload = overrideResponsesTokenKey(
+              nextPayload,
+              overrideKey,
+              parsePositiveInt(maxTokens, 1000, 200000)
+            );
+            logger.warn(
+              `AI responses retry with token key override: ${overrideKey || 'none'}`
+            );
+            continue;
+          }
+        }
+        throw this.buildResponsesHttpError(response, data);
+      }
+      this.assertNoResponsesPayloadError(data);
 
-    return {
-      responseId: data?.id,
-      content: extractResponsesText(data),
-      finishReason: normalizeResponsesFinishReason(data),
-      modelUsed: data?.model || model,
-      toolCalls: extractResponsesFunctionCalls(data)
-    };
+      return {
+        responseId: data?.id,
+        content: extractResponsesText(data),
+        finishReason: normalizeResponsesFinishReason(data),
+        modelUsed: data?.model || model,
+        toolCalls: extractResponsesFunctionCalls(data)
+      };
+    }
   }
 
   applyStreamToolEventState(state, eventType, payload) {
@@ -754,160 +1475,194 @@ class AIService {
   }
 
   async callResponsesStreamTurn({
-    resolvedBaseURL,
+    responsesEndpoint,
     providerHeaders,
     requestPayload,
     timeoutMs,
     model,
-    onEvent
+    onEvent,
+    maxTokens
   }) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    let response;
-    try {
-      response = await fetch(`${resolvedBaseURL}/responses`, {
-        method: 'POST',
-        headers: providerHeaders,
-        body: JSON.stringify(requestPayload),
-        signal: controller.signal
-      });
-    } catch (err) {
-      if (err?.name === 'AbortError') {
-        const timeoutErr = new Error(`AI gateway timeout after ${timeoutMs}ms`);
-        timeoutErr.status = 504;
-        throw timeoutErr;
-      }
-      throw err;
-    } finally {
-      clearTimeout(timer);
-    }
-
-    if (!response.ok) {
-      const data = await this.parseJsonResponseBody(response);
-      throw this.buildResponsesHttpError(response, data);
-    }
-
-    if (!response.body || typeof response.body.getReader !== 'function') {
-      const data = await this.parseJsonResponseBody(response);
-      this.assertNoResponsesPayloadError(data);
-      return {
-        responseId: data?.id,
-        content: extractResponsesText(data),
-        finishReason: normalizeResponsesFinishReason(data),
-        modelUsed: data?.model || model,
-        toolCalls: extractResponsesFunctionCalls(data)
-      };
-    }
-
-    const parser = createResponsesSseParser();
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    const state = {
-      responseId: '',
-      modelUsed: model,
-      finishReason: undefined,
-      deltaText: [],
-      completedPayload: null,
-      completionSeen: false,
-      doneSeen: false,
-      toolCalls: new Map()
-    };
-
-    const handleEvent = (event) => {
-      this.emitResponsesEvent(onEvent, event);
-
-      if (event?.done) {
-        state.doneSeen = true;
-        return;
-      }
-
-      const payload = event?.data && typeof event.data === 'object' ? event.data : null;
-      const eventType = String(payload?.type || event?.type || '').trim();
-      if (!payload || !eventType) return;
-
-      if (!state.responseId) {
-        state.responseId = String(payload?.response?.id || payload?.response_id || payload?.id || '').trim();
-      }
-
-      if (payload?.response?.model && !state.modelUsed) {
-        state.modelUsed = payload.response.model;
-      }
-
-      if (eventType === 'response.output_text.delta' && typeof payload.delta === 'string') {
-        state.deltaText.push(payload.delta);
-      }
-
-      if (eventType === 'response.output_text.done' && typeof payload.text === 'string') {
-        state.deltaText.push(payload.text);
-      }
-
-      if (eventType === 'response.failed') {
-        const failure = payload?.response?.error || payload?.error || {};
-        const failureErr = new Error(failure?.message || 'AI responses stream failed');
-        failureErr.status = parsePositiveInt(failure?.status, 502, 599);
-        failureErr.limitHint = failure?.code || failure?.type || 'provider_error';
-        throw failureErr;
-      }
-
-      if (eventType === 'response.completed') {
-        state.completionSeen = true;
-        state.completedPayload = payload?.response && typeof payload.response === 'object'
-          ? payload.response
-          : payload;
-        state.finishReason = normalizeResponsesFinishReason(state.completedPayload) || state.finishReason;
-        state.modelUsed = state.completedPayload?.model || state.modelUsed;
-        state.responseId = String(state.completedPayload?.id || state.responseId || '').trim();
-      }
-
-      this.applyStreamToolEventState(state, eventType, payload);
-    };
+    let retriedTokenOverride = false;
+    let nextPayload = requestPayload;
 
     while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      const chunkText = decoder.decode(value, { stream: true });
-      const events = parser.push(chunkText);
-      events.forEach(handleEvent);
-    }
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      let response;
+      try {
+        response = await fetch(responsesEndpoint, {
+          method: 'POST',
+          headers: providerHeaders,
+          body: JSON.stringify(nextPayload),
+          signal: controller.signal
+        });
+      } catch (err) {
+        if (err?.name === 'AbortError') {
+          const timeoutErr = new Error(`AI gateway timeout after ${timeoutMs}ms`);
+          timeoutErr.status = 504;
+          throw timeoutErr;
+        }
+        throw err;
+      } finally {
+        clearTimeout(timer);
+      }
 
-    const finalChunk = decoder.decode();
-    const trailingEvents = [
-      ...parser.push(finalChunk),
-      ...parser.flush()
-    ];
-    trailingEvents.forEach(handleEvent);
+      if (!response.ok) {
+        const data = await this.parseJsonResponseBody(response);
+        if (response.status === 400 && !retriedTokenOverride) {
+          const overrideKey = resolveResponsesTokenKeyOverride(this.buildResponsesErrorBodyText(data));
+          if (overrideKey !== null) {
+            retriedTokenOverride = true;
+            nextPayload = overrideResponsesTokenKey(
+              nextPayload,
+              overrideKey,
+              parsePositiveInt(maxTokens, 1000, 200000)
+            );
+            logger.warn(
+              `AI responses stream retry with token key override: ${overrideKey || 'none'}`
+            );
+            continue;
+          }
+        }
+        throw this.buildResponsesHttpError(response, data);
+      }
 
-    const completedPayload = state.completedPayload && typeof state.completedPayload === 'object'
-      ? state.completedPayload
-      : {};
-    this.assertNoResponsesPayloadError(completedPayload);
+      const contentType = String(response.headers?.get('content-type') || '').toLowerCase();
+      if (contentType && !contentType.includes('text/event-stream')) {
+        const data = await this.parseJsonResponseBody(response);
+        this.assertNoResponsesPayloadError(data);
+        return {
+          responseId: data?.id,
+          content: extractResponsesText(data),
+          finishReason: normalizeResponsesFinishReason(data),
+          modelUsed: data?.model || model,
+          toolCalls: extractResponsesFunctionCalls(data)
+        };
+      }
 
-    const completionToolCalls = extractResponsesFunctionCalls(completedPayload);
-    const mergedToolCalls = new Map();
-    completionToolCalls.forEach((call) => {
-      mergedToolCalls.set(String(call.id || ''), call);
-    });
+      if (!response.body || typeof response.body.getReader !== 'function') {
+        const data = await this.parseJsonResponseBody(response);
+        this.assertNoResponsesPayloadError(data);
+        return {
+          responseId: data?.id,
+          content: extractResponsesText(data),
+          finishReason: normalizeResponsesFinishReason(data),
+          modelUsed: data?.model || model,
+          toolCalls: extractResponsesFunctionCalls(data)
+        };
+      }
 
-    state.toolCalls.forEach((call) => {
-      const key = String(call?.id || '').trim();
-      if (!key) return;
-      const existing = mergedToolCalls.get(key);
-      mergedToolCalls.set(key, {
-        id: key,
-        name: String(call?.name || existing?.name || '').trim(),
-        arguments: call?.arguments || existing?.arguments || '{}'
+      const parser = createResponsesSseParser();
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      const state = {
+        responseId: '',
+        modelUsed: model,
+        finishReason: undefined,
+        deltaText: [],
+        completedPayload: null,
+        completionSeen: false,
+        doneSeen: false,
+        toolCalls: new Map()
+      };
+
+      const handleEvent = (event) => {
+        this.emitResponsesEvent(onEvent, event);
+
+        if (event?.done) {
+          state.doneSeen = true;
+          return;
+        }
+
+        const payload = event?.data && typeof event.data === 'object' ? event.data : null;
+        const eventType = String(payload?.type || event?.type || '').trim();
+        if (!payload || !eventType) return;
+
+        if (!state.responseId) {
+          state.responseId = String(payload?.response?.id || payload?.response_id || payload?.id || '').trim();
+        }
+
+        if (payload?.response?.model && !state.modelUsed) {
+          state.modelUsed = payload.response.model;
+        }
+
+        if (eventType === 'response.output_text.delta' && typeof payload.delta === 'string') {
+          state.deltaText.push(payload.delta);
+        }
+
+        if (eventType === 'response.output_text.done' && typeof payload.text === 'string') {
+          state.deltaText.push(payload.text);
+        }
+
+        if (eventType === 'response.failed') {
+          const failure = payload?.response?.error || payload?.error || {};
+          const failureErr = new Error(failure?.message || 'AI responses stream failed');
+          failureErr.status = parsePositiveInt(failure?.status, 502, 599);
+          failureErr.limitHint = failure?.code || failure?.type || 'provider_error';
+          throw failureErr;
+        }
+
+        if (eventType === 'response.completed') {
+          state.completionSeen = true;
+          state.completedPayload = payload?.response && typeof payload.response === 'object'
+            ? payload.response
+            : payload;
+          state.finishReason = normalizeResponsesFinishReason(state.completedPayload) || state.finishReason;
+          state.modelUsed = state.completedPayload?.model || state.modelUsed;
+          state.responseId = String(state.completedPayload?.id || state.responseId || '').trim();
+        }
+
+        this.applyStreamToolEventState(state, eventType, payload);
+      };
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const chunkText = decoder.decode(value, { stream: true });
+        const events = parser.push(chunkText);
+        events.forEach(handleEvent);
+      }
+
+      const finalChunk = decoder.decode();
+      const trailingEvents = [
+        ...parser.push(finalChunk),
+        ...parser.flush()
+      ];
+      trailingEvents.forEach(handleEvent);
+
+      const completedPayload = state.completedPayload && typeof state.completedPayload === 'object'
+        ? state.completedPayload
+        : {};
+      this.assertNoResponsesPayloadError(completedPayload);
+
+      const completionToolCalls = extractResponsesFunctionCalls(completedPayload);
+      const mergedToolCalls = new Map();
+      completionToolCalls.forEach((call) => {
+        mergedToolCalls.set(String(call.id || ''), call);
       });
-    });
 
-    return {
-      responseId: String(completedPayload?.id || state.responseId || '').trim() || undefined,
-      content: extractResponsesText(completedPayload) || state.deltaText.join('').trim(),
-      finishReason: normalizeResponsesFinishReason(completedPayload)
-        || state.finishReason
-        || ((state.completionSeen || state.doneSeen) ? 'stop' : undefined),
-      modelUsed: completedPayload?.model || state.modelUsed || model,
-      toolCalls: [...mergedToolCalls.values()].filter((call) => call && call.name)
-    };
+      state.toolCalls.forEach((call) => {
+        const key = String(call?.id || '').trim();
+        if (!key) return;
+        const existing = mergedToolCalls.get(key);
+        mergedToolCalls.set(key, {
+          id: key,
+          name: String(call?.name || existing?.name || '').trim(),
+          arguments: call?.arguments || existing?.arguments || '{}'
+        });
+      });
+
+      return {
+        responseId: String(completedPayload?.id || state.responseId || '').trim() || undefined,
+        content: extractResponsesText(completedPayload) || state.deltaText.join('').trim(),
+        finishReason: normalizeResponsesFinishReason(completedPayload)
+          || state.finishReason
+          || ((state.completionSeen || state.doneSeen) ? 'stop' : undefined),
+        modelUsed: completedPayload?.model || state.modelUsed || model,
+        toolCalls: [...mergedToolCalls.values()].filter((call) => call && call.name)
+      };
+    }
   }
 
   async callResponsesCompletion({
@@ -923,27 +1678,37 @@ class AIService {
     responseFormat,
     stream,
     onEvent,
-    enableMcpToolLoop
+    enableMcpToolLoop,
+    telemetryContext
   }) {
     const config = this.getAIConfig();
     const timeoutMs = parsePositiveInt(requestTimeoutMs, config.aiRequestTimeoutMs, 180000);
     const resolvedBaseURL = String(baseURL || config.baseURL || '').replace(/\/+$/, '');
+    const responsesEndpoint = resolveResponsesEndpoint(resolvedBaseURL);
     const resolvedApiKey = apiKey || config.apiKey;
     const resolvedHttpReferer = httpReferer !== undefined ? httpReferer : config.httpReferer;
     const resolvedTitle = title !== undefined ? title : config.title;
     const useStream = toBoolean(stream, false);
     const useToolLoop = toBoolean(enableMcpToolLoop, false);
     const maxToolRounds = parsePositiveInt(process.env.AI_RESPONSES_MAX_TOOL_ROUNDS, 4, 8);
+    const includeResponsesTemperature = toBoolean(process.env.AI_RESPONSES_INCLUDE_TEMPERATURE, false);
 
-    if (!resolvedBaseURL || !resolvedApiKey) {
+    if (!responsesEndpoint || !resolvedApiKey) {
       const configErr = new Error('AI provider config is incomplete');
       configErr.status = 502;
       throw configErr;
     }
 
+    const forceStream = shouldForceResponsesStream(responsesEndpoint, 'responses');
+    const effectiveStream = useStream || forceStream;
+    if (forceStream && !useStream) {
+      logger.info(`AI responses stream forced for endpoint host: ${responsesEndpoint}`);
+    }
+
     const providerHeaders = {
       Authorization: `Bearer ${resolvedApiKey}`,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      Accept: effectiveStream ? 'text/event-stream' : 'application/json'
     };
 
     if (isOpenRouterBaseURL(resolvedBaseURL)) {
@@ -958,10 +1723,11 @@ class AIService {
     const initialPayload = buildResponsesRequestPayload({
       model,
       messages,
-      temperature,
+      temperature: includeResponsesTemperature ? temperature : undefined,
       maxTokens,
       responseFormat,
-      stream: useStream
+      stream: effectiveStream,
+      baseURL: responsesEndpoint
     });
 
     const stableFormat = initialPayload?.text;
@@ -976,21 +1742,23 @@ class AIService {
     }
 
     for (let round = 0; round < maxToolRounds; round++) {
-      const turnResult = useStream
+      const turnResult = effectiveStream
         ? await this.callResponsesStreamTurn({
-          resolvedBaseURL,
+          responsesEndpoint,
           providerHeaders,
           requestPayload,
           timeoutMs,
           model,
-          onEvent
+          onEvent,
+          maxTokens
         })
         : await this.callResponsesJsonTurn({
-          resolvedBaseURL,
+          responsesEndpoint,
           providerHeaders,
           requestPayload,
           timeoutMs,
-          model
+          model,
+          maxTokens
         });
 
       const toolCalls = useToolLoop ? (turnResult.toolCalls || []) : [];
@@ -1024,20 +1792,44 @@ class AIService {
           call_id: dispatchResult.callId,
           name: dispatchResult.name
         });
+        emitQualityTelemetry('quality.ai.tool_call.executed', {
+          analysisRequestId: String(telemetryContext?.analysisRequestId || 'unknown'),
+          stage: 'service_tool_call',
+          status: 'ok',
+          quality: {
+            toolName: dispatchResult.name,
+            hasPayload: dispatchResult.payload !== undefined && dispatchResult.payload !== null
+          },
+          perf: {
+            round: round + 1
+          },
+          tags: {
+            layer: 'service',
+            toolCallId: String(dispatchResult.callId || '').slice(0, 120)
+          }
+        });
       }
 
       requestPayload = {
         model,
         previous_response_id: previousResponseId,
-        input: toolOutputs,
-        temperature,
-        max_output_tokens: maxTokens
+        input: toolOutputs
       };
+
+      requestPayload = overrideResponsesTokenKey(
+        requestPayload,
+        responsesTokenKey(responsesEndpoint),
+        parsePositiveInt(maxTokens, 1000, 200000)
+      );
+
+      if (includeResponsesTemperature) {
+        requestPayload.temperature = temperature;
+      }
 
       if (stableFormat) {
         requestPayload.text = stableFormat;
       }
-      if (useStream) {
+      if (effectiveStream) {
         requestPayload.stream = true;
       }
       if (useToolLoop) {
@@ -1087,9 +1879,26 @@ class AIService {
       peers: (payload?.peers || []).slice(0, limits.peers),
       peerResearch: (payload?.peerResearch || []).slice(0, limits.peerResearch),
       mcpSignals: {
-        industries: (payload?.industryNames || []).slice(0, limits.mcpSignals),
-        competitors: (payload?.competitorNames || []).slice(0, limits.mcpSignals)
+        industries: (payload?.industryNames || []).slice(0, Math.min(limits.mcpSignals, 12)),
+        competitors: (payload?.competitorNames || []).slice(0, Math.min(limits.mcpSignals, 12))
       },
+      externalEvidence: {
+        marketReferences: normalizeList(payload?.marketReport?.references || [])
+          .slice(0, Math.min(limits.mcpSignals, 6))
+          .map((item) => ({
+            name: String(item?.name || '').trim().slice(0, 120),
+            url: String(item?.url || '').trim().slice(0, 220),
+            summary: String(item?.summary || item?.description || '').trim().slice(0, 180)
+          })),
+        financialReferences: normalizeList(payload?.financialData?.references || [])
+          .slice(0, Math.min(limits.mcpSignals, 6))
+          .map((item) => ({
+            name: String(item?.name || '').trim().slice(0, 120),
+            url: String(item?.url || '').trim().slice(0, 220)
+          })),
+        financialIndicators: payload?.financialData?.indicators || {}
+      },
+      mcpCoverage: payload?.mcpCoverage || {},
       keyFindings: (payload?.keyFindings || []).slice(0, limits.keyFindings)
     };
 
@@ -1106,6 +1915,8 @@ class AIService {
 - 关键结论必须可追溯到输入数据字段或模型结果。
 - 对“同行对标”给出至少3条可执行策略，并写明适用场景。
 - 对任何不确定项明确为“假设”并说明影响范围。
+- 若 mcpCoverage 显示信号不足，必须先补充外部证据后再下结论。
+- 尽量给出可追溯外部参考来源；若仍不足需明确数据缺口与下一步检索方向。
 
 输入数据(JSON)：
 ${JSON.stringify(compactPayload, null, 2)}`
@@ -1113,29 +1924,77 @@ ${JSON.stringify(compactPayload, null, 2)}`
     ];
   }
 
-  async generateAnalysisNarrative(payload) {
-    const config = this.getAIConfig();
+  buildPrimaryResponsesNarrativePayload(payload) {
+    return {
+      ...payload,
+      industryNames: (payload?.industryNames || []).slice(0, 6),
+      competitorNames: (payload?.competitorNames || []).slice(0, 6),
+      peers: (payload?.peers || []).slice(0, 4),
+      peerResearch: (payload?.peerResearch || []).slice(0, 4),
+      keyFindings: (payload?.keyFindings || []).slice(0, 6),
+      suggestions: (payload?.suggestions || []).slice(0, 4),
+      marketReport: {
+        ...(payload?.marketReport || {}),
+        references: normalizeList(payload?.marketReport?.references || []).slice(0, 3)
+      },
+      financialData: {
+        ...(payload?.financialData || {}),
+        references: normalizeList(payload?.financialData?.references || []).slice(0, 3)
+      }
+    };
+  }
+
+  buildClaimSupportRepairMessages(payload, draftText, unsupportedSamples = []) {
+    const samples = normalizeList(unsupportedSamples)
+      .slice(0, CLAIM_SUPPORT_MAX_UNSUPPORTED_SAMPLES)
+      .map((item, index) => `${index + 1}. ${String(item || '').trim().slice(0, 180)}`)
+      .join('\n');
+    const sampleBlock = samples ? `\n待修复断言样例：\n${samples}` : '';
+
+    return [
+      ...this.buildNarrativeMessages(payload),
+      {
+        role: 'assistant',
+        content: String(draftText || '').slice(0, 7000)
+      },
+      {
+        role: 'user',
+        content: `请修订上一版分析文本，只保留可由输入数据字段或外部参考直接支撑的结论。\n要求：\n- 删除或改写无法在输入证据中找到锚点的断言；\n- 对不确定内容用“假设”标记；\n- 不要新增输入中不存在的数据或来源；\n- 输出仍保持完整分析结构。${sampleBlock}`
+      }
+    ];
+  }
+
+  async generateAnalysisNarrative(payload, options = {}) {
+    const config = this.getAIConfig(options?.configOverride || null);
+    const qualityFlags = resolveQualityFlags(config);
+    const telemetryContext = options?.telemetryContext || {};
+    const analysisRequestId = String(telemetryContext.analysisRequestId || 'unknown');
     if (config.useMock) {
       return {
         text: this.buildNarrativeFallback(payload),
         modelUsed: 'fallback-template',
-        degraded: true
+        providerUsed: 'mock',
+        protocol: 'mock',
+        degraded: true,
+        degradedReason: 'mock_mode_enabled',
+        promptVersion: ANALYSIS_PROMPT_VERSION,
+        qualityFlags
       };
     }
 
     if (!config.apiKey || !config.baseURL) {
-      logger.warn('AI provider config missing, degraded to template fallback');
-      return {
-        text: this.buildNarrativeFallback(payload),
-        modelUsed: 'fallback-template',
-        providerUsed: 'fallback',
-        degraded: true,
-        promptVersion: ANALYSIS_PROMPT_VERSION
-      };
+      const err = new Error('AI provider config missing');
+      err.status = 502;
+      err.limitHint = 'provider_config_missing';
+      throw err;
     }
 
     const run = async () => {
       const messages = this.buildNarrativeMessages(payload);
+      const primaryResponsesMessages = this.buildNarrativeMessages(
+        this.buildPrimaryResponsesNarrativePayload(payload)
+      );
+      const enableResponsesToolLoop = toBoolean(process.env.AI_RESPONSES_ENABLE_TOOL_LOOP, false);
       const providerQueue = [];
 
       const primaryModels = uniqueNonEmpty([config.model, ...(config.modelFallbacks || []), config.fallbackModel]);
@@ -1150,6 +2009,20 @@ ${JSON.stringify(compactPayload, null, 2)}`
           title: config.title
         });
       });
+
+      if (config.protocol === 'responses') {
+        primaryModels.forEach((modelName) => {
+          providerQueue.push({
+            provider: 'primary',
+            protocol: 'chat_completions',
+            model: modelName,
+            baseURL: config.baseURL,
+            apiKey: config.apiKey,
+            httpReferer: config.httpReferer,
+            title: config.title
+          });
+        });
+      }
 
       if (config.secondaryBaseURL && config.secondaryApiKey && config.secondaryModel) {
         providerQueue.push({
@@ -1193,6 +2066,32 @@ ${JSON.stringify(compactPayload, null, 2)}`
           }
 
           try {
+            const usePrimaryResponsesLitePrompt = target.provider === 'primary' && target.protocol === 'responses';
+            const requestMessages = usePrimaryResponsesLitePrompt ? primaryResponsesMessages : messages;
+            const requestMaxTokens = usePrimaryResponsesLitePrompt ? Math.min(config.maxTokens, 700) : config.maxTokens;
+            emitQualityTelemetry('quality.ai.provider_attempt', {
+              analysisRequestId,
+              stage: 'service_provider_attempt',
+              status: 'ok',
+              quality: {
+                provider: target.provider,
+                protocol: target.protocol,
+                model: target.model,
+                degraded: false
+              },
+              perf: {
+                attempt,
+                maxAttempts: config.aiRetryMaxAttempts,
+                promptChars: JSON.stringify(requestMessages).length,
+                maxTokens: requestMaxTokens
+              },
+              tags: {
+                layer: 'service'
+              }
+            });
+            logger.info(
+              `AI narrative request provider=${target.provider} protocol=${target.protocol} model=${target.model} promptChars=${JSON.stringify(requestMessages).length} maxTokens=${requestMaxTokens}`
+            );
             const result = await this.callProviderCompletion({
               protocol: target.protocol,
               model: target.model,
@@ -1200,21 +2099,246 @@ ${JSON.stringify(compactPayload, null, 2)}`
               apiKey: target.apiKey,
               httpReferer: target.httpReferer,
               title: target.title,
-              messages,
+              messages: requestMessages,
               temperature: config.temperature,
-              maxTokens: config.maxTokens,
+              maxTokens: requestMaxTokens,
               requestTimeoutMs: Math.min(config.aiRequestTimeoutMs, remainingMs),
               responseFormat: payload?.responseFormat,
-              enableMcpToolLoop: target.protocol === 'responses'
+              enableMcpToolLoop: target.protocol === 'responses' && enableResponsesToolLoop,
+              telemetryContext
             });
 
             if (result.content) {
+              const initialClaimSupport = buildClaimSupportMetrics(result.content, payload);
+              emitQualityTelemetry('quality.ai.claim_support', {
+                analysisRequestId,
+                stage: 'service_claim_support_validation',
+                status: initialClaimSupport.unsupportedClaims > 0 ? 'degraded' : 'ok',
+                quality: {
+                  provider: target.provider,
+                  protocol: target.protocol,
+                  model: result.modelUsed || target.model,
+                  claimSupport: {
+                    totalClaims: initialClaimSupport.totalClaims,
+                    supportedClaims: initialClaimSupport.supportedClaims,
+                    unsupportedClaims: initialClaimSupport.unsupportedClaims,
+                    supportRatio: initialClaimSupport.supportRatio,
+                    validationSkipped: initialClaimSupport.validationSkipped === true,
+                    skipReason: initialClaimSupport.skipReason || null
+                  }
+                },
+                tags: {
+                  layer: 'service'
+                }
+              });
+
+              if (initialClaimSupport.unsupportedClaims > 0) {
+                if (!qualityFlags.qualityStrictMode) {
+                  const nonStrictClaimSupport = {
+                    ...initialClaimSupport,
+                    repairAttempted: false,
+                    repairSucceeded: false,
+                    degradedByUnsupportedClaim: true,
+                    reasonCode: 'unsupported_claim_detected'
+                  };
+                  emitQualityTelemetry('quality.ai.claim_support', {
+                    analysisRequestId,
+                    stage: 'service_claim_support_terminal',
+                    status: 'ok',
+                    quality: {
+                      provider: target.provider,
+                      protocol: target.protocol,
+                      model: result.modelUsed || target.model,
+                      degraded: false,
+                      degradedReason: null,
+                      claimSupportWarning: true,
+                      claimSupport: {
+                        totalClaims: nonStrictClaimSupport.totalClaims,
+                        supportedClaims: nonStrictClaimSupport.supportedClaims,
+                        unsupportedClaims: nonStrictClaimSupport.unsupportedClaims,
+                        supportRatio: nonStrictClaimSupport.supportRatio,
+                        repaired: false,
+                        repairAttempted: false
+                      }
+                    },
+                    tags: {
+                      layer: 'service'
+                    }
+                  });
+                  return {
+                    text: result.content,
+                    modelUsed: result.modelUsed,
+                    providerUsed: target.provider,
+                    protocol: target.protocol,
+                    degraded: false,
+                    degradedReason: null,
+                    promptVersion: ANALYSIS_PROMPT_VERSION,
+                    qualityFlags,
+                    claimSupport: nonStrictClaimSupport
+                  };
+                }
+
+                let repairClaimSupport = {
+                  ...initialClaimSupport,
+                  repairAttempted: true,
+                  repairSucceeded: false,
+                  degradedByUnsupportedClaim: true,
+                  reasonCode: 'unsupported_claim_detected'
+                };
+                let repaired = false;
+
+                for (let repairAttempt = 1; repairAttempt <= CLAIM_SUPPORT_REPAIR_MAX_ATTEMPTS; repairAttempt++) {
+                  const repairRemainingMs = deadline - Date.now();
+                  if (repairRemainingMs <= 1000) {
+                    break;
+                  }
+
+                  try {
+                    const repairMessages = this.buildClaimSupportRepairMessages(
+                      payload,
+                      result.content,
+                      initialClaimSupport.unsupportedSamples
+                    );
+                    const repairResult = await this.callProviderCompletion({
+                      protocol: target.protocol,
+                      model: target.model,
+                      baseURL: target.baseURL,
+                      apiKey: target.apiKey,
+                      httpReferer: target.httpReferer,
+                      title: target.title,
+                      messages: repairMessages,
+                      temperature: config.temperature,
+                      maxTokens: requestMaxTokens,
+                      requestTimeoutMs: Math.min(config.aiRequestTimeoutMs, repairRemainingMs),
+                      responseFormat: payload?.responseFormat,
+                      enableMcpToolLoop: false,
+                      telemetryContext
+                    });
+
+                    const repairedText = String(repairResult?.content || '').trim();
+                    if (!repairedText) {
+                      continue;
+                    }
+                    const repairedMetrics = buildClaimSupportMetrics(repairedText, payload);
+                    repairClaimSupport = {
+                      ...repairedMetrics,
+                      repairAttempted: true,
+                      repairSucceeded: repairedMetrics.unsupportedClaims === 0,
+                      degradedByUnsupportedClaim: repairedMetrics.unsupportedClaims > 0,
+                      reasonCode: repairedMetrics.unsupportedClaims > 0 ? 'unsupported_claim_detected' : null
+                    };
+                    if (repairedMetrics.unsupportedClaims === 0) {
+                      repaired = true;
+                      emitQualityTelemetry('quality.ai.claim_support', {
+                        analysisRequestId,
+                        stage: 'service_claim_support_repair',
+                        status: 'ok',
+                        quality: {
+                          provider: target.provider,
+                          protocol: target.protocol,
+                          model: repairResult.modelUsed || result.modelUsed || target.model,
+                          claimSupport: {
+                            totalClaims: repairedMetrics.totalClaims,
+                            supportedClaims: repairedMetrics.supportedClaims,
+                            unsupportedClaims: repairedMetrics.unsupportedClaims,
+                            supportRatio: repairedMetrics.supportRatio,
+                            repaired: true
+                          }
+                        },
+                        tags: {
+                          layer: 'service'
+                        }
+                      });
+                      return {
+                        text: repairedText,
+                        modelUsed: repairResult.modelUsed || result.modelUsed,
+                        providerUsed: target.provider,
+                        protocol: target.protocol,
+                        degraded: false,
+                        promptVersion: ANALYSIS_PROMPT_VERSION,
+                        qualityFlags,
+                        claimSupport: repairClaimSupport
+                      };
+                    }
+                  } catch (repairErr) {
+                    logger.warn(
+                      `AI claim-support repair failed provider=${target.provider} model=${target.model} attempt=${repairAttempt}: ${repairErr?.message || 'unknown error'}`
+                    );
+                  }
+                }
+
+                if (!repaired) {
+                  emitQualityTelemetry('quality.ai.claim_support', {
+                    analysisRequestId,
+                    stage: 'service_claim_support_terminal',
+                    status: 'degraded',
+                    quality: {
+                      provider: 'fallback',
+                      protocol: 'fallback',
+                      model: 'fallback-template',
+                      degraded: true,
+                      degradedReason: 'unsupported_claim_detected',
+                      claimSupport: {
+                        totalClaims: repairClaimSupport.totalClaims,
+                        supportedClaims: repairClaimSupport.supportedClaims,
+                        unsupportedClaims: repairClaimSupport.unsupportedClaims,
+                        supportRatio: repairClaimSupport.supportRatio,
+                        repaired: false,
+                        repairAttempted: true
+                      }
+                    },
+                    tags: {
+                      layer: 'service'
+                    }
+                  });
+
+                  return {
+                    text: this.buildNarrativeFallback(payload),
+                    modelUsed: 'fallback-template',
+                    providerUsed: 'fallback',
+                    protocol: 'fallback',
+                    degraded: true,
+                    degradedReason: 'unsupported_claim_detected',
+                    promptVersion: ANALYSIS_PROMPT_VERSION,
+                    qualityFlags,
+                    claimSupport: repairClaimSupport
+                  };
+                }
+              }
+
+              emitQualityTelemetry('quality.ai.provider_terminal', {
+                analysisRequestId,
+                stage: 'service_provider_terminal',
+                status: 'ok',
+                quality: {
+                  provider: target.provider,
+                  protocol: target.protocol,
+                  model: result.modelUsed || target.model,
+                  degraded: false
+                },
+                perf: {
+                  attempt,
+                  maxAttempts: config.aiRetryMaxAttempts
+                },
+                tags: {
+                  layer: 'service'
+                }
+              });
               return {
                 text: result.content,
                 modelUsed: result.modelUsed,
                 providerUsed: target.provider,
+                protocol: target.protocol,
                 degraded: false,
-                promptVersion: ANALYSIS_PROMPT_VERSION
+                promptVersion: ANALYSIS_PROMPT_VERSION,
+                qualityFlags,
+                claimSupport: {
+                  ...initialClaimSupport,
+                  repairAttempted: false,
+                  repairSucceeded: false,
+                  degradedByUnsupportedClaim: false,
+                  reasonCode: null
+                }
               };
             }
 
@@ -1237,10 +2361,30 @@ ${JSON.stringify(compactPayload, null, 2)}`
               : fallbackDelayMs;
 
             logger.warn(
-              `AI narrative failed provider=${target.provider} model=${target.model} attempt=${attempt} status=${status || 'unknown'}: ${err?.message || 'unknown error'}`
+              `AI narrative failed provider=${target.provider} protocol=${target.protocol} model=${target.model} attempt=${attempt} status=${status || 'unknown'}: ${err?.message || 'unknown error'}`
             );
 
             if (retryable && attempt < config.aiRetryMaxAttempts) {
+              emitQualityTelemetry('quality.ai.provider_retry', {
+                analysisRequestId,
+                stage: 'service_provider_retry',
+                status: 'degraded',
+                quality: {
+                  provider: target.provider,
+                  protocol: target.protocol,
+                  model: target.model,
+                  retryable: true
+                },
+                perf: {
+                  attempt,
+                  maxAttempts: config.aiRetryMaxAttempts,
+                  waitMs
+                },
+                error: buildSafeErrorPayload(err, status || 0),
+                tags: {
+                  layer: 'service'
+                }
+              });
               const remainingForWait = deadline - Date.now() - 500;
               const boundedWaitMs = Math.min(waitMs, Math.max(0, remainingForWait));
               if (boundedWaitMs > 0) {
@@ -1248,6 +2392,26 @@ ${JSON.stringify(compactPayload, null, 2)}`
               }
               continue;
             }
+
+            emitQualityTelemetry('quality.ai.provider_terminal', {
+              analysisRequestId,
+              stage: 'service_provider_terminal',
+              status: retryable ? 'degraded' : 'error',
+              quality: {
+                provider: target.provider,
+                protocol: target.protocol,
+                model: target.model,
+                retryable
+              },
+              perf: {
+                attempt,
+                maxAttempts: config.aiRetryMaxAttempts
+              },
+              error: buildSafeErrorPayload(err, status || 0),
+              tags: {
+                layer: 'service'
+              }
+            });
 
             if (!retryable) break;
           }
@@ -1260,23 +2424,33 @@ ${JSON.stringify(compactPayload, null, 2)}`
 
       if (effectiveStatus === 429) {
         logger.warn('AI narrative rate limited, degraded to template fallback');
+        emitQualityTelemetry('quality.ai.provider_terminal', {
+          analysisRequestId,
+          stage: 'service_provider_terminal',
+          status: 'degraded',
+          quality: {
+            provider: 'fallback',
+            protocol: 'fallback',
+            model: 'fallback-template',
+            degraded: true,
+            degradedReason: 'provider_rate_limited'
+          },
+          perf: {
+            maxAttempts: config.aiRetryMaxAttempts
+          },
+          tags: {
+            layer: 'service'
+          }
+        });
         return {
           text: this.buildNarrativeFallback(payload),
           modelUsed: 'fallback-template',
           providerUsed: 'fallback',
+          protocol: 'fallback',
           degraded: true,
-          promptVersion: ANALYSIS_PROMPT_VERSION
-        };
-      }
-
-      if (effectiveStatus !== 504) {
-        logger.error('AI narrative degraded to template fallback:', lastError?.message || lastError);
-        return {
-          text: this.buildNarrativeFallback(payload),
-          modelUsed: 'fallback-template',
-          providerUsed: 'fallback',
-          degraded: true,
-          promptVersion: ANALYSIS_PROMPT_VERSION
+          degradedReason: 'provider_rate_limited',
+          promptVersion: ANALYSIS_PROMPT_VERSION,
+          qualityFlags
         };
       }
 
@@ -1291,6 +2465,24 @@ ${JSON.stringify(compactPayload, null, 2)}`
       err.retryAfterSec = parsePositiveInt(lastError?.retryAfterSec, 0, 600) || (err.status === 429 ? 10 : 0);
       err.limitHint = lastError?.limitHint || (err.status === 429 ? 'provider_rate_limited' : (err.status === 504 ? 'provider_timeout' : 'provider_error'));
       err.cause = lastError;
+      emitQualityTelemetry('quality.ai.provider_terminal', {
+        analysisRequestId,
+        stage: 'service_provider_terminal',
+        status: 'error',
+        quality: {
+          provider: 'none',
+          protocol: 'none',
+          model: 'none',
+          degraded: false
+        },
+        perf: {
+          maxAttempts: config.aiRetryMaxAttempts
+        },
+        error: buildSafeErrorPayload(err, err.status),
+        tags: {
+          layer: 'service'
+        }
+      });
       throw err;
     };
 
@@ -1299,6 +2491,8 @@ ${JSON.stringify(compactPayload, null, 2)}`
 
   async generateAnalysisNarrativeStream(payload, options = {}) {
     const onEvent = typeof options?.onEvent === 'function' ? options.onEvent : null;
+    const telemetryContext = options?.telemetryContext || {};
+    const analysisRequestId = String(telemetryContext.analysisRequestId || 'unknown');
     const emitFallback = (text, modelName = 'fallback-template') => {
       this.emitResponsesEvent(onEvent, {
         type: 'response.output_text.delta',
@@ -1318,35 +2512,36 @@ ${JSON.stringify(compactPayload, null, 2)}`
       });
     };
 
-    const config = this.getAIConfig();
+    const config = this.getAIConfig(options?.configOverride || null);
+    const qualityFlags = resolveQualityFlags(config);
     if (config.useMock) {
       const text = this.buildNarrativeFallback(payload);
       emitFallback(text);
       return {
         text,
         modelUsed: 'fallback-template',
-        providerUsed: 'fallback',
+        providerUsed: 'mock',
+        protocol: 'mock',
         degraded: true,
+        degradedReason: 'mock_mode_enabled',
         finishReason: 'stop',
-        promptVersion: ANALYSIS_PROMPT_VERSION
+        promptVersion: ANALYSIS_PROMPT_VERSION,
+        qualityFlags
       };
     }
 
     if (!config.apiKey || !config.baseURL) {
-      logger.warn('AI provider config missing, degraded to template fallback');
-      const text = this.buildNarrativeFallback(payload);
-      emitFallback(text);
-      return {
-        text,
-        modelUsed: 'fallback-template',
-        providerUsed: 'fallback',
-        degraded: true,
-        finishReason: 'stop',
-        promptVersion: ANALYSIS_PROMPT_VERSION
-      };
+      const err = new Error('AI provider config missing');
+      err.status = 502;
+      err.limitHint = 'provider_config_missing';
+      throw err;
     }
 
     const messages = this.buildNarrativeMessages(payload);
+    const primaryResponsesMessages = this.buildNarrativeMessages(
+      this.buildPrimaryResponsesNarrativePayload(payload)
+    );
+    const enableResponsesToolLoop = toBoolean(process.env.AI_RESPONSES_ENABLE_TOOL_LOOP, false);
     const providerQueue = [];
     const primaryModels = uniqueNonEmpty([config.model, ...(config.modelFallbacks || []), config.fallbackModel]);
     primaryModels.forEach((modelName) => {
@@ -1360,6 +2555,20 @@ ${JSON.stringify(compactPayload, null, 2)}`
         title: config.title
       });
     });
+
+    if (config.protocol === 'responses') {
+      primaryModels.forEach((modelName) => {
+        providerQueue.push({
+          provider: 'primary',
+          protocol: 'chat_completions',
+          model: modelName,
+          baseURL: config.baseURL,
+          apiKey: config.apiKey,
+          httpReferer: config.httpReferer,
+          title: config.title
+        });
+      });
+    }
 
     if (config.secondaryBaseURL && config.secondaryApiKey && config.secondaryModel) {
       providerQueue.push({
@@ -1402,6 +2611,33 @@ ${JSON.stringify(compactPayload, null, 2)}`
         }
 
         try {
+          const usePrimaryResponsesLitePrompt = target.provider === 'primary' && target.protocol === 'responses';
+          const requestMessages = usePrimaryResponsesLitePrompt ? primaryResponsesMessages : messages;
+          const requestMaxTokens = usePrimaryResponsesLitePrompt ? Math.min(config.maxTokens, 700) : config.maxTokens;
+          emitQualityTelemetry('quality.ai.provider_attempt', {
+            analysisRequestId,
+            stage: 'service_provider_attempt',
+            status: 'ok',
+            quality: {
+              provider: target.provider,
+              protocol: target.protocol,
+              model: target.model,
+              degraded: false,
+              stream: true
+            },
+            perf: {
+              attempt,
+              maxAttempts: config.aiRetryMaxAttempts,
+              promptChars: JSON.stringify(requestMessages).length,
+              maxTokens: requestMaxTokens
+            },
+            tags: {
+              layer: 'service'
+            }
+          });
+          logger.info(
+            `AI streaming narrative request provider=${target.provider} protocol=${target.protocol} model=${target.model} promptChars=${JSON.stringify(requestMessages).length} maxTokens=${requestMaxTokens}`
+          );
           const result = await this.callProviderCompletion({
             protocol: target.protocol,
             model: target.model,
@@ -1409,24 +2645,46 @@ ${JSON.stringify(compactPayload, null, 2)}`
             apiKey: target.apiKey,
             httpReferer: target.httpReferer,
             title: target.title,
-            messages,
+            messages: requestMessages,
             temperature: config.temperature,
-            maxTokens: config.maxTokens,
+            maxTokens: requestMaxTokens,
             requestTimeoutMs: Math.min(config.aiRequestTimeoutMs, remainingMs),
             responseFormat: payload?.responseFormat,
             stream: true,
             onEvent,
-            enableMcpToolLoop: target.protocol === 'responses'
+            enableMcpToolLoop: target.protocol === 'responses' && enableResponsesToolLoop,
+            telemetryContext
           });
 
           if (result.content) {
+            emitQualityTelemetry('quality.ai.provider_terminal', {
+              analysisRequestId,
+              stage: 'service_provider_terminal',
+              status: 'ok',
+              quality: {
+                provider: target.provider,
+                protocol: target.protocol,
+                model: result.modelUsed || target.model,
+                degraded: false,
+                stream: true
+              },
+              perf: {
+                attempt,
+                maxAttempts: config.aiRetryMaxAttempts
+              },
+              tags: {
+                layer: 'service'
+              }
+            });
             return {
               text: result.content,
               modelUsed: result.modelUsed,
               providerUsed: target.provider,
+              protocol: target.protocol,
               degraded: false,
               finishReason: result.finishReason || 'stop',
-              promptVersion: ANALYSIS_PROMPT_VERSION
+              promptVersion: ANALYSIS_PROMPT_VERSION,
+              qualityFlags
             };
           }
 
@@ -1450,10 +2708,31 @@ ${JSON.stringify(compactPayload, null, 2)}`
             : fallbackDelayMs;
 
           logger.warn(
-            `AI streaming narrative failed provider=${target.provider} model=${target.model} attempt=${attempt} status=${status || 'unknown'}: ${err?.message || 'unknown error'}`
+            `AI streaming narrative failed provider=${target.provider} protocol=${target.protocol} model=${target.model} attempt=${attempt} status=${status || 'unknown'}: ${err?.message || 'unknown error'}`
           );
 
           if (retryable && attempt < config.aiRetryMaxAttempts) {
+            emitQualityTelemetry('quality.ai.provider_retry', {
+              analysisRequestId,
+              stage: 'service_provider_retry',
+              status: 'degraded',
+              quality: {
+                provider: target.provider,
+                protocol: target.protocol,
+                model: target.model,
+                retryable: true,
+                stream: true
+              },
+              perf: {
+                attempt,
+                maxAttempts: config.aiRetryMaxAttempts,
+                waitMs
+              },
+              error: buildSafeErrorPayload(err, status || 0),
+              tags: {
+                layer: 'service'
+              }
+            });
             const remainingForWait = deadline - Date.now() - 500;
             const boundedWaitMs = Math.min(waitMs, Math.max(0, remainingForWait));
             if (boundedWaitMs > 0) {
@@ -1461,6 +2740,27 @@ ${JSON.stringify(compactPayload, null, 2)}`
             }
             continue;
           }
+
+          emitQualityTelemetry('quality.ai.provider_terminal', {
+            analysisRequestId,
+            stage: 'service_provider_terminal',
+            status: retryable ? 'degraded' : 'error',
+            quality: {
+              provider: target.provider,
+              protocol: target.protocol,
+              model: target.model,
+              retryable,
+              stream: true
+            },
+            perf: {
+              attempt,
+              maxAttempts: config.aiRetryMaxAttempts
+            },
+            error: buildSafeErrorPayload(err, status || 0),
+            tags: {
+              layer: 'service'
+            }
+          });
 
           if (!retryable) break;
         }
@@ -1471,16 +2771,38 @@ ${JSON.stringify(compactPayload, null, 2)}`
     const lastStatus = Number(lastError?.status || 502);
     const effectiveStatus = hadRateLimit ? 429 : (hadTimeout ? 504 : lastStatus);
 
-    if (effectiveStatus === 429 || effectiveStatus !== 504) {
+    if (effectiveStatus === 429) {
       const text = this.buildNarrativeFallback(payload);
       emitFallback(text);
+      emitQualityTelemetry('quality.ai.provider_terminal', {
+        analysisRequestId,
+        stage: 'service_provider_terminal',
+        status: 'degraded',
+        quality: {
+          provider: 'fallback',
+          protocol: 'fallback',
+          model: 'fallback-template',
+          degraded: true,
+          degradedReason: 'provider_rate_limited',
+          stream: true
+        },
+        perf: {
+          maxAttempts: config.aiRetryMaxAttempts
+        },
+        tags: {
+          layer: 'service'
+        }
+      });
       return {
         text,
         modelUsed: 'fallback-template',
         providerUsed: 'fallback',
+        protocol: 'fallback',
         degraded: true,
+        degradedReason: 'provider_rate_limited',
         finishReason: 'stop',
-        promptVersion: ANALYSIS_PROMPT_VERSION
+        promptVersion: ANALYSIS_PROMPT_VERSION,
+        qualityFlags
       };
     }
 
@@ -1495,6 +2817,25 @@ ${JSON.stringify(compactPayload, null, 2)}`
     err.retryAfterSec = parsePositiveInt(lastError?.retryAfterSec, 0, 600) || (err.status === 429 ? 10 : 0);
     err.limitHint = lastError?.limitHint || (err.status === 429 ? 'provider_rate_limited' : (err.status === 504 ? 'provider_timeout' : 'provider_error'));
     err.cause = lastError;
+    emitQualityTelemetry('quality.ai.provider_terminal', {
+      analysisRequestId,
+      stage: 'service_provider_terminal',
+      status: 'error',
+      quality: {
+        provider: 'none',
+        protocol: 'none',
+        model: 'none',
+        degraded: false,
+        stream: true
+      },
+      perf: {
+        maxAttempts: config.aiRetryMaxAttempts
+      },
+      error: buildSafeErrorPayload(err, err.status),
+      tags: {
+        layer: 'service'
+      }
+    });
     throw err;
   }
 
@@ -1502,9 +2843,19 @@ ${JSON.stringify(compactPayload, null, 2)}`
     if (this.mcpClient) return this.mcpClient;
 
     try {
+      // StdioClientTransport only inherits a safe env subset by default.
+      // Pass full env so MCP_* source configuration reaches mcp-server.js.
+      const inheritedEnv = Object.entries(process.env).reduce((acc, [key, value]) => {
+        if (value !== undefined && value !== null) {
+          acc[key] = String(value);
+        }
+        return acc;
+      }, {});
+
       const transport = new StdioClientTransport({
         command: process.env.MCP_SERVER_COMMAND || 'node',
-        args: [process.env.MCP_SERVER_PATH || './mcp-server.js']
+        args: [process.env.MCP_SERVER_PATH || './mcp-server.js'],
+        env: inheritedEnv
       });
 
       this.mcpClient = new Client({ name: 'chayan-backend', version: '1.0.0' }, { capabilities: {} });
@@ -1517,40 +2868,123 @@ ${JSON.stringify(compactPayload, null, 2)}`
     }
   }
 
+  async extractCompetitorCompanies(target, options = {}) {
+    const normalizedTarget = String(target || '').trim();
+    if (!normalizedTarget) return [];
+
+    const maxCandidates = parsePositiveInt(options?.maxCandidates, 6, 12);
+    const config = this.getAIConfig(options?.configOverride || null);
+    if (config.useMock || !config.apiKey || !config.baseURL) {
+      return [];
+    }
+
+    const messages = [
+      {
+        role: 'system',
+        content: 'You are a market research assistant. Return only valid JSON.'
+      },
+      {
+        role: 'user',
+        content: [
+          `Target company: ${normalizedTarget}`,
+          `Task: list up to ${maxCandidates} direct competitor companies/brands in the same business arena.`,
+          'Output JSON only in this exact shape: {"competitors":[{"name":"..."}]}',
+          'Rules: no explanations, no markdown, no events/topics, no products-only entries.'
+        ].join('\n')
+      }
+    ];
+
+    try {
+      const completion = await this.callProviderCompletion({
+        protocol: config.protocol,
+        model: config.model,
+        messages,
+        temperature: 0.2,
+        maxTokens: 220,
+        requestTimeoutMs: Math.min(config.aiRequestTimeoutMs, 30000),
+        baseURL: config.baseURL,
+        apiKey: config.apiKey,
+        httpReferer: config.httpReferer,
+        title: config.title,
+        tokenKeyOverride: config.tokenKeyOverride
+      });
+
+      const rawText = String(completion?.content || '').trim();
+      const candidates = parseCompetitorCandidatesFromText(rawText, maxCandidates);
+      const normalizedTargetKey = normalizeCompetitorName(normalizedTarget).toLowerCase();
+
+      return candidates.filter((name) => normalizeCompetitorName(name).toLowerCase() !== normalizedTargetKey);
+    } catch (err) {
+      logger.warn('AI competitor candidate extraction failed:', err?.message || err);
+      return [];
+    }
+  }
+
   async _callMcpWithCache(toolName, args, cachePrefix, mockFn) {
-    const cacheKey = `${cachePrefix}:${typeof args === 'string' ? args : JSON.stringify(args)}`;
+    const argKey = typeof args === 'string' ? args : stableJsonStringify(args);
+    const cacheKey = `${cachePrefix}:${argKey}`;
     const cached = await redis.get(cacheKey).catch(() => null);
     if (cached) {
       try {
-        return extractMcpPayload(JSON.parse(cached));
+        const cachedPayload = extractMcpPayload(JSON.parse(cached));
+        const normalizedCachedPayload = this.coerceMcpToolPayload(toolName, cachedPayload, args, {
+          fallbackOnInvalid: false
+        });
+        if (normalizedCachedPayload) {
+          return normalizedCachedPayload;
+        }
+        await redis.del(cacheKey).catch(() => {});
       } catch {
         await redis.del(cacheKey).catch(() => {});
       }
     }
 
     const client = await this.connectMCP();
+    const useMockFallback = toBoolean(process.env.AI_MCP_USE_MOCK_FALLBACK, this.getAIConfig().useMock);
+    const buildFallbackPayload = (reason) => {
+      if (useMockFallback) {
+        return mockFn(args);
+      }
+      return this.buildMcpFallbackPayload(toolName, args, reason);
+    };
+
     if (!client) {
-      const mock = mockFn(args);
-      await redis.setex(cacheKey, 3600, JSON.stringify(mock)).catch(() => {});
-      return mock;
+      const fallbackPayload = buildFallbackPayload('mcp_client_unavailable');
+      await redis.setex(cacheKey, useMockFallback ? 300 : 30, JSON.stringify(fallbackPayload)).catch(() => {});
+      return fallbackPayload;
     }
 
     try {
       const toolArgs = typeof args === 'string' ? { query: args } : args;
+      const requestTimeoutMs = this.getAIConfig().mcpToolTimeoutMs;
       const result = await withTimeout(
-        client.callTool({ name: toolName, arguments: toolArgs }),
-        this.getAIConfig().mcpToolTimeoutMs,
+        client.callTool(
+          { name: toolName, arguments: toolArgs },
+          undefined,
+          { timeout: requestTimeoutMs }
+        ),
+        requestTimeoutMs + 2000,
         `MCP tool ${toolName} timeout`
       );
-      const payload = extractMcpPayload(result);
+      const extractedPayload = extractMcpPayload(result);
+      const payload = this.coerceMcpToolPayload(toolName, extractedPayload, args, {
+        fallbackOnInvalid: false
+      });
+      if (!payload) {
+        const invalidPayloadErr = new Error(`MCP ${toolName} returned invalid payload`);
+        invalidPayloadErr.status = 502;
+        invalidPayloadErr.limitHint = 'mcp_payload_invalid';
+        throw invalidPayloadErr;
+      }
       await redis.setex(cacheKey, 3600, JSON.stringify(payload)).catch(() => {});
       return payload;
     } catch (err) {
       logger.error(`MCP ${toolName} failed:`, err);
       this.mcpClient = null;
-      const mock = mockFn(args);
-      await redis.setex(cacheKey, 60, JSON.stringify(mock)).catch(() => {});
-      return mock;
+      const fallbackReason = String(err?.limitHint || '').trim() || 'mcp_tool_failed';
+      const fallbackPayload = buildFallbackPayload(fallbackReason);
+      await redis.setex(cacheKey, useMockFallback ? 60 : 15, JSON.stringify(fallbackPayload)).catch(() => {});
+      return fallbackPayload;
     }
   }
 
@@ -1569,6 +3003,14 @@ ${JSON.stringify(compactPayload, null, 2)}`
 
   async fetchFinancialData(params) {
     return this._callMcpWithCache('fetch_financial_data', params, 'financial', (p) => this.buildMockFinancialData(p));
+  }
+
+  async fetchRegulatoryFilings(params) {
+    return this._callMcpWithCache('fetch_regulatory_filings', params, 'filings', (p) => this.buildMockRegulatoryFilings(p));
+  }
+
+  async fetchNewsStream(params) {
+    return this._callMcpWithCache('fetch_news_stream', params, 'news', (p) => this.buildMockNewsStream(p));
   }
 
   async analyzeData() {

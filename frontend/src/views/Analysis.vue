@@ -1,404 +1,349 @@
 <template>
-  <div class="analysis-container">
+  <div class="analysis-page">
     <div class="content-shell">
-      <h2 class="section-title">
-        <el-icon><PieChart /></el-icon>
-        <span>数据分析</span>
-      </h2>
+      <header class="page-header">
+        <h2 class="page-title">Multi-dimensional Analysis</h2>
+        <p class="page-subtitle">Visualize financial, market, and competitiveness dimensions in one view.</p>
+      </header>
 
-      <el-card class="selector-card" shadow="never">
-        <div class="selector-content">
-          <span class="selector-label">企业选择</span>
+      <AppCard title="Enterprise Selector" subtitle="Choose a target enterprise to load analysis datasets.">
+        <div class="selector-row">
           <el-select
             v-model="selectedId"
-            placeholder="请选择企业"
-            :prefix-icon="OfficeBuilding"
-            @change="fetchData"
+            placeholder="Select enterprise"
             class="selector"
+            filterable
+            @change="fetchAnalysis"
           >
-            <el-option v-for="item in enterprises" :key="item.id" :label="item.name || `企业 ${item.id}`" :value="item.id" />
+            <el-option
+              v-for="item in enterprises"
+              :key="String(item.id)"
+              :label="item.name || `Enterprise ${item.id}`"
+              :value="String(item.id)"
+            />
           </el-select>
         </div>
-      </el-card>
+      </AppCard>
 
-      <div v-if="loading" class="charts-grid">
-        <el-card v-for="item in 4" :key="item" class="chart-card" shadow="hover">
-          <el-skeleton animated>
-            <template #template>
-              <el-skeleton-item variant="h3" style="width: 38%; margin-bottom: 16px;" />
-              <el-skeleton-item variant="rect" style="width: 100%; height: 320px;" />
-            </template>
-          </el-skeleton>
-        </el-card>
-      </div>
+      <section v-if="loading" class="skeleton-grid">
+        <AppCard v-for="item in 4" :key="item">
+          <AppSkeleton variant="title" width="180px" />
+          <AppSkeleton variant="rect" height="280px" />
+        </AppCard>
+      </section>
 
-      <el-result v-else-if="error" status="warning" :title="error" sub-title="请检查网络或稍后重试" />
+      <el-result v-else-if="errorMessage" status="warning" :title="errorMessage" sub-title="Please retry later." />
+      <el-empty v-else-if="!selectedId" description="Select an enterprise to view analysis data" />
+      <el-empty v-else-if="!analysisData" description="No analysis data available" />
 
-      <el-empty v-else-if="!selectedId" description="请选择企业查看分析数据" />
-
-      <div v-else-if="data" class="charts-grid">
-        <el-card class="chart-card" shadow="hover">
-          <template #header>
-            <div class="card-title">
-              <el-icon><DataAnalysis /></el-icon>
-              <span>财务健康度</span>
-            </div>
-          </template>
-          <div class="chart-scroll">
-            <v-chart :option="gaugeOpt" class="chart-view" />
-          </div>
-        </el-card>
-
-        <el-card class="chart-card" shadow="hover">
-          <template #header>
-            <div class="card-title">
-              <el-icon><TrendCharts /></el-icon>
-              <span>市场趋势</span>
-            </div>
-          </template>
-          <div class="chart-scroll">
-            <v-chart :option="lineOpt" class="chart-view" />
-          </div>
-        </el-card>
-
-        <el-card class="chart-card" shadow="hover">
-          <template #header>
-            <div class="card-title">
-              <el-icon><Aim /></el-icon>
-              <span>竞争力分析</span>
-            </div>
-          </template>
-          <div class="chart-scroll">
-            <v-chart :option="radarOpt" class="chart-view" />
-          </div>
-        </el-card>
-
-        <el-card class="chart-card" shadow="hover">
-          <template #header>
-            <div class="card-title">
-              <el-icon><Histogram /></el-icon>
-              <span>数据对比</span>
-            </div>
-          </template>
-          <div class="chart-scroll">
-            <v-chart :option="barOpt" class="chart-view" />
-          </div>
-        </el-card>
-      </div>
-
-      <el-empty v-else description="暂无分析数据" />
+      <MultiDimensionalInsightPanel
+        v-else
+        title="Enterprise Multi-dimensional Dashboard"
+        :description="`Target: ${selectedName || 'N/A'}`"
+        :data="panelData"
+      />
     </div>
   </div>
 </template>
 
-<script setup>
-import { ref, computed, onMounted } from 'vue';
-import VChart from 'vue-echarts';
-import { PieChart, OfficeBuilding, DataAnalysis, TrendCharts, Aim, Histogram } from '@element-plus/icons-vue';
-import { gaugeOption, lineOption, radarOption, barOption } from '../utils/chartConfig';
-import request from '../utils/request';
+<script setup lang="ts">
+import { computed, onMounted, ref } from 'vue'
+import request from '../utils/request'
+import AppCard from '../components/base/AppCard.vue'
+import AppSkeleton from '../components/feedback/AppSkeleton.vue'
+import MultiDimensionalInsightPanel from '../components/charts/MultiDimensionalInsightPanel.vue'
 
-const selectedId = ref('');
-const enterprises = ref([]);
-const data = ref(null);
-const loading = ref(false);
-const error = ref('');
+interface Enterprise {
+  id: string | number
+  name?: string
+}
 
-const DEFAULT_DATES = ['1月', '2月', '3月', '4月', '5月', '6月'];
-const DEFAULT_LINE_VALUES = [120, 132, 101, 134, 90, 230];
-const DEFAULT_INDICATORS = [
-  { name: '市场份额', max: 100 },
-  { name: '创新能力', max: 100 },
-  { name: '品牌价值', max: 100 },
-  { name: '客户满意度', max: 100 },
-  { name: '盈利能力', max: 100 }
-];
-const DEFAULT_RADAR_VALUES = [80, 70, 85, 90, 75];
-const DEFAULT_BAR_CATEGORIES = ['收入', '成本', '利润', '资产', '负债'];
-const DEFAULT_BAR_VALUES = [200, 150, 50, 300, 100];
+interface AnalysisRow {
+  analysis_type?: string
+  result_json?: Record<string, unknown>
+}
 
-const normalizeNumber = (value) => {
-  const num = Number(value);
-  return Number.isFinite(num) ? num : null;
-};
+interface AnalysisPayload {
+  financial: Record<string, unknown>
+  marketTrend: Record<string, unknown>
+  competitiveness: Record<string, unknown>
+}
 
-const toRecord = (value) => {
+const selectedId = ref('')
+const enterprises = ref<Enterprise[]>([])
+const analysisData = ref<AnalysisPayload | null>(null)
+const loading = ref(false)
+const errorMessage = ref('')
+
+const selectedName = computed(() => {
+  const current = enterprises.value.find(item => String(item.id) === selectedId.value)
+  return current?.name || ''
+})
+
+const toNumber = (value: unknown): number | null => {
+  const numeric = Number(value)
+  return Number.isFinite(numeric) ? numeric : null
+}
+
+const toObject = (value: unknown): Record<string, unknown> => {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
-    return value;
+    return value as Record<string, unknown>
   }
-  return {};
-};
+  return {}
+}
 
-const toNumericEntries = (value) => {
-  const source = toRecord(value);
-  return Object.entries(source)
-    .map(([key, raw]) => [key, normalizeNumber(raw)])
-    .filter(([, num]) => num !== null);
-};
+const getNumericEntries = (value: unknown): Array<[string, number]> => {
+  return Object.entries(toObject(value))
+    .map(([key, raw]) => [key, toNumber(raw)] as [string, number | null])
+    .filter((item): item is [string, number] => item[1] !== null)
+}
 
-const normalizeAnalysisPayload = (rows) => {
-  const latestByType = rows.reduce((acc, row) => {
-    const type = typeof row?.analysis_type === 'string' ? row.analysis_type : '';
-    if (!type || acc[type]) {
-      return acc;
-    }
-    acc[type] = toRecord(row?.result_json);
-    return acc;
-  }, {});
+const normalizeRows = (rows: AnalysisRow[]): AnalysisPayload | null => {
+  const latest = rows.reduce<Record<string, Record<string, unknown>>>((acc, row) => {
+    const type = String(row?.analysis_type || '').trim()
+    if (!type || acc[type]) return acc
+    acc[type] = toObject(row?.result_json)
+    return acc
+  }, {})
 
-  if (Object.keys(latestByType).length === 0) {
-    return null;
-  }
+  if (!Object.keys(latest).length) return null
 
   return {
-    financial: toRecord(latestByType.financial),
-    marketTrend: toRecord(latestByType.market_trend),
-    competitiveness: toRecord(latestByType.competitiveness)
-  };
-};
-
-const buildLineData = (marketTrend) => {
-  const trendPoints = [];
-  const growthRate = normalizeNumber(marketTrend?.growth_rate);
-  const prediction = normalizeNumber(marketTrend?.prediction);
-
-  if (growthRate !== null) {
-    trendPoints.push({ label: '增长率', value: growthRate });
+    financial: toObject(latest.financial),
+    marketTrend: toObject(latest.market_trend),
+    competitiveness: toObject(latest.competitiveness)
   }
-  if (prediction !== null) {
-    trendPoints.push({ label: '预测值', value: prediction });
-  }
+}
 
-  if (trendPoints.length > 0) {
-    return {
-      dates: trendPoints.map(point => point.label),
-      values: trendPoints.map(point => point.value)
-    };
-  }
-
-  return { dates: DEFAULT_DATES, values: DEFAULT_LINE_VALUES };
-};
-
-const buildRadarData = (competitiveness) => {
-  const factorEntries = toNumericEntries(competitiveness?.factors);
-
-  if (factorEntries.length > 0) {
+const buildRadarData = (competitiveness: Record<string, unknown>) => {
+  const factorEntries = getNumericEntries(competitiveness.factors)
+  if (factorEntries.length) {
     return {
       indicators: factorEntries.map(([name, value]) => ({
         name,
-        max: Math.max(1, Math.ceil(Math.abs(value) * 1.2))
+        max: Math.max(100, Math.ceil(Math.abs(value) * 1.25))
       })),
-      values: factorEntries.map(([, value]) => value)
-    };
+      values: factorEntries.map(([, value]) => value),
+      seriesName: 'Competitiveness'
+    }
   }
 
-  return { indicators: DEFAULT_INDICATORS, values: DEFAULT_RADAR_VALUES };
-};
+  return {
+    indicators: [
+      { name: 'Market Share', max: 100 },
+      { name: 'Innovation', max: 100 },
+      { name: 'Brand Equity', max: 100 },
+      { name: 'Customer Value', max: 100 },
+      { name: 'Profitability', max: 100 }
+    ],
+    values: [78, 72, 84, 80, 74],
+    seriesName: 'Competitiveness'
+  }
+}
 
-const buildBarData = (financial) => {
-  const factorEntries = toNumericEntries(financial?.factors);
+const buildLineData = (marketTrend: Record<string, unknown>) => {
+  const trendEntries = getNumericEntries(marketTrend.trends)
+  if (trendEntries.length) {
+    return {
+      categories: trendEntries.map(([name]) => name),
+      values: trendEntries.map(([, value]) => value),
+      seriesName: 'Trend',
+      unit: 'index'
+    }
+  }
 
-  if (factorEntries.length > 0) {
+  const growthRate = toNumber(marketTrend.growth_rate)
+  const prediction = toNumber(marketTrend.prediction)
+  if (growthRate !== null || prediction !== null) {
+    return {
+      categories: ['Growth Rate', 'Prediction'],
+      values: [growthRate ?? 0, prediction ?? 0],
+      seriesName: 'Trend',
+      unit: '%'
+    }
+  }
+
+  return {
+    categories: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+    values: [110, 124, 118, 136, 149, 163],
+    seriesName: 'Trend',
+    unit: 'index'
+  }
+}
+
+const buildBarData = (financial: Record<string, unknown>) => {
+  const factorEntries = getNumericEntries(financial.factors)
+  if (factorEntries.length) {
     return {
       categories: factorEntries.map(([name]) => name),
       values: factorEntries.map(([, value]) => {
-        if (Math.abs(value) <= 1) {
-          return Number((value * 100).toFixed(2));
-        }
-        return Number(value.toFixed(2));
-      })
-    };
+        if (Math.abs(value) <= 1) return Number((value * 100).toFixed(2))
+        return Number(value.toFixed(2))
+      }),
+      seriesName: 'Financial Factors',
+      unit: 'score'
+    }
   }
 
-  return { categories: DEFAULT_BAR_CATEGORIES, values: DEFAULT_BAR_VALUES };
-};
+  return {
+    categories: ['Revenue', 'Cost', 'Margin', 'Assets', 'Liability'],
+    values: [220, 156, 92, 278, 121],
+    seriesName: 'Financial Factors',
+    unit: 'score'
+  }
+}
+
+const buildGraphData = (
+  competitiveness: Record<string, unknown>,
+  marketTrend: Record<string, unknown>,
+  financial: Record<string, unknown>
+) => {
+  const rootName = selectedName.value || `Enterprise ${selectedId.value || 'Target'}`
+  const competitorEntries = getNumericEntries(competitiveness.factors).slice(0, 4)
+  const trendEntries = getNumericEntries(marketTrend.trends).slice(0, 3)
+  const financeEntries = getNumericEntries(financial.factors).slice(0, 3)
+
+  const nodes = [
+    { id: 'target', name: rootName, category: 0, symbolSize: 60, value: 100 }
+  ]
+
+  const links: Array<{ source: string; target: string; value: number }> = []
+
+  competitorEntries.forEach(([name, value], index) => {
+    const id = `comp-${index}`
+    nodes.push({ id, name, category: 1, symbolSize: 36, value })
+    links.push({ source: 'target', target: id, value: Number(value.toFixed(2)) })
+  })
+
+  trendEntries.forEach(([name, value], index) => {
+    const id = `trend-${index}`
+    nodes.push({ id, name, category: 2, symbolSize: 34, value })
+    links.push({ source: 'target', target: id, value: Number(value.toFixed(2)) })
+  })
+
+  financeEntries.forEach(([name, value], index) => {
+    const id = `finance-${index}`
+    nodes.push({ id, name, category: 3, symbolSize: 34, value })
+    links.push({ source: 'target', target: id, value: Number(value.toFixed(2)) })
+  })
+
+  return {
+    categories: [
+      { name: 'Target' },
+      { name: 'Competitiveness' },
+      { name: 'Trend' },
+      { name: 'Financial' }
+    ],
+    nodes,
+    links,
+    seriesName: 'Enterprise Relationships'
+  }
+}
+
+const panelData = computed(() => {
+  const payload = analysisData.value
+  if (!payload) return undefined
+
+  return {
+    radar: buildRadarData(payload.competitiveness),
+    line: buildLineData(payload.marketTrend),
+    bar: buildBarData(payload.financial),
+    graph: buildGraphData(payload.competitiveness, payload.marketTrend, payload.financial)
+  }
+})
 
 const loadEnterprises = async () => {
   try {
-    const res = await request.get('/enterprises', { params: { page: 1, limit: 100, page_size: 100 } });
-    enterprises.value = Array.isArray(res?.data) ? res.data : [];
-
+    const response = await request.get('/enterprises', {
+      params: { page: 1, limit: 100, page_size: 100 },
+      headers: { 'X-Skip-Global-Loading': '1' }
+    })
+    enterprises.value = Array.isArray(response?.data) ? response.data : []
     if (!selectedId.value && enterprises.value.length > 0) {
-      selectedId.value = enterprises.value[0].id;
-      await fetchData();
+      const [firstEnterprise] = enterprises.value
+      if (firstEnterprise) {
+        selectedId.value = String(firstEnterprise.id)
+        await fetchAnalysis()
+      }
     }
   } catch {
-    enterprises.value = [];
+    enterprises.value = []
   }
-};
+}
 
-const fetchData = async () => {
-  if (!selectedId.value) return;
-  loading.value = true;
-  error.value = '';
+const fetchAnalysis = async () => {
+  if (!selectedId.value) return
+  loading.value = true
+  errorMessage.value = ''
   try {
-    const res = await request.get(`/analysis/${selectedId.value}`);
-    const rows = Array.isArray(res?.data) ? res.data : [];
-    data.value = normalizeAnalysisPayload(rows);
+    const response = await request.get(`/analysis/${selectedId.value}`, {
+      headers: { 'X-Skip-Global-Loading': '1' }
+    })
+    const rows = Array.isArray(response?.data) ? response.data : []
+    analysisData.value = normalizeRows(rows as AnalysisRow[])
   } catch {
-    data.value = null;
-    error.value = '获取数据失败';
+    analysisData.value = null
+    errorMessage.value = 'Failed to load analysis data'
   } finally {
-    loading.value = false;
+    loading.value = false
   }
-};
+}
 
-const gaugeOpt = computed(() => {
-  if (!data.value) return {};
-  const score = normalizeNumber(data.value.financial?.score);
-  const safeScore = score === null ? 75 : Math.max(0, Math.min(100, score));
-  return gaugeOption(safeScore);
-});
-
-const lineOpt = computed(() => {
-  if (!data.value) return {};
-  const lineData = buildLineData(data.value.marketTrend);
-  return lineOption(lineData.dates, lineData.values);
-});
-
-const radarOpt = computed(() => {
-  if (!data.value) return {};
-  const radarData = buildRadarData(data.value.competitiveness);
-  return radarOption(radarData.indicators, radarData.values);
-});
-
-const barOpt = computed(() => {
-  if (!data.value) return {};
-  const barData = buildBarData(data.value.financial);
-  return barOption(barData.categories, barData.values);
-});
-
-onMounted(loadEnterprises);
+onMounted(loadEnterprises)
 </script>
 
 <style scoped>
-.analysis-container {
-  background: #f5f7fb;
-  padding: 24px;
+.analysis-page {
+  padding: 20px;
 }
 
-.content-shell {
-  width: min(1360px, 100%);
-  margin: 0 auto;
+.page-header {
+  margin-bottom: 16px;
 }
 
-.section-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0 0 20px;
+.page-title {
+  margin: 0;
   font-size: 24px;
-  font-weight: 600;
-  color: #1f2d3d;
+  color: #0f172a;
+  font-weight: 700;
 }
 
-.selector-card {
-  border-radius: 8px;
-  margin-bottom: 20px;
-}
-
-.selector-card :deep(.el-card__body) {
-  padding: 18px 22px;
-}
-
-.selector-content {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  flex-wrap: wrap;
-}
-
-.selector-label {
-  color: #606266;
+.page-subtitle {
+  margin: 6px 0 0;
+  color: #64748b;
   font-size: 14px;
-  font-weight: 500;
+}
+
+.selector-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
 }
 
 .selector {
-  width: min(420px, 100%);
-  max-width: 100%;
+  width: min(460px, 100%);
 }
 
-.charts-grid {
+.skeleton-grid {
+  margin-top: 16px;
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 20px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 
-.chart-card {
-  border-radius: 8px;
-  transition: box-shadow 0.3s;
-}
-
-.chart-card:hover {
-  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
-}
-
-.card-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 15px;
-  color: #303133;
-  font-weight: 600;
-}
-
-.chart-view {
-  min-width: 420px;
-  height: 320px;
-}
-
-.chart-scroll,
-.table-scroll {
-  width: 100%;
-  overflow-x: auto;
-}
-
-.table-scroll :deep(table) {
-  min-width: 700px;
-}
-
-@media (max-width: 1200px) {
-  .charts-grid {
+@media (max-width: 1100px) {
+  .skeleton-grid {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 768px) {
-  .analysis-container {
-    padding: 16px;
+  .analysis-page {
+    padding: 12px;
   }
 
-  .section-title {
-    margin-bottom: 14px;
-    font-size: 22px;
-  }
-
-  .selector-card {
-    margin-bottom: 14px;
-  }
-
-  .selector-card :deep(.el-card__body) {
-    padding: 14px;
-  }
-
-  .selector-content {
-    align-items: stretch;
-    gap: 10px;
-  }
-
-  .selector {
-    width: 100%;
-  }
-
-  .charts-grid {
-    gap: 12px;
-  }
-
-  .chart-view {
-    min-width: 300px;
-    height: 280px;
+  .page-title {
+    font-size: 20px;
   }
 }
 </style>

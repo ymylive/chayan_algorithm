@@ -5,6 +5,6 @@ exports.healthCheck = async (req, res) => {
     await pool.query('SELECT 1');
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   } catch (error) {
-    res.status(503).json({ status: 'error', message: error.message });
+    res.status(503).json({ status: 'error', message: 'Service unavailable' });
   }
 };

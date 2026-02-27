@@ -1,0 +1,27 @@
+{
+  "fixtureVersion": "1.0",
+  "scenarioId": "conflicting-evidence",
+  "class": "conflicting_evidence",
+  "target": {
+    "name": "beichen-storage",
+    "industry": "energy-storage"
+  },
+  "evidence": {
+    "competitors": [
+      { "name": "storage-peer-a", "source": "bing_news", "relevanceScore": 2.1 },
+      { "name": "storage-peer-b", "source": "duckduckgo", "relevanceScore": 2.0 }
+    ],
+    "marketReferences": [
+      { "title": "demand-up-trend", "source": "report_archive", "confidence": 0.76 },
+      { "title": "demand-down-trend", "source": "report_archive", "confidence": 0.75 }
+    ],
+    "financialReferences": [
+      { "title": "margin-improved", "source": "finance_archive", "confidence": 0.7 },
+      { "title": "cashflow-pressured", "source": "finance_digest", "confidence": 0.69 }
+    ]
+  },
+  "constraints": {
+    "offlineOnly": true,
+    "deterministicSeed": "seed-conflict-001"
+  }
+}

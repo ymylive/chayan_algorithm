@@ -1,0 +1,28 @@
+{
+  "fixtureVersion": "1.0",
+  "scenarioId": "normal",
+  "class": "normal",
+  "target": {
+    "name": "qinglan-energy",
+    "industry": "new-energy"
+  },
+  "evidence": {
+    "competitors": [
+      { "name": "competitor-a", "source": "bing_news", "relevanceScore": 2.7 },
+      { "name": "competitor-b", "source": "bing_web", "relevanceScore": 2.4 },
+      { "name": "competitor-c", "source": "duckduckgo", "relevanceScore": 2.1 }
+    ],
+    "marketReferences": [
+      { "title": "storage-quarterly-report", "source": "report_archive", "confidence": 0.87 },
+      { "title": "policy-tracker", "source": "policy_digest", "confidence": 0.81 }
+    ],
+    "financialReferences": [
+      { "title": "annual-report-summary", "source": "finance_archive", "confidence": 0.82 },
+      { "title": "margin-comparison", "source": "finance_digest", "confidence": 0.79 }
+    ]
+  },
+  "constraints": {
+    "offlineOnly": true,
+    "deterministicSeed": "seed-normal-001"
+  }
+}

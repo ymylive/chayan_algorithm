@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { promisify } = require('util');
 const logger = require('../config/logger');
 const pool = require('../config/database');
 
@@ -12,18 +13,20 @@ try {
 const hashPassword = (password) =>
   crypto.createHash('sha256').update(password).digest('hex');
 
+const scryptAsync = promisify(crypto.scrypt);
+
 const normalizeEmail = (email) => {
   if (typeof email !== 'string') return '';
   return email.trim().toLowerCase();
 };
 
-const hashDbPassword = (password) => {
+const hashDbPassword = async (password) => {
   const salt = crypto.randomBytes(16).toString('hex');
-  const derived = crypto.scryptSync(password, salt, 64).toString('hex');
+  const derived = (await scryptAsync(password, salt, 64)).toString('hex');
   return `scrypt$${salt}$${derived}`;
 };
 
-const verifyDbPassword = (password, storedHash) => {
+const verifyDbPassword = async (password, storedHash) => {
   if (!storedHash || typeof storedHash !== 'string') return false;
 
   const parts = storedHash.split('$');
@@ -35,7 +38,7 @@ const verifyDbPassword = (password, storedHash) => {
   if (!salt || !expectedHash) return false;
 
   try {
-    const derived = crypto.scryptSync(password, salt, 64).toString('hex');
+    const derived = (await scryptAsync(password, salt, 64)).toString('hex');
     return crypto.timingSafeEqual(
       Buffer.from(derived, 'utf8'),
       Buffer.from(expectedHash, 'utf8')
@@ -114,7 +117,7 @@ const register = async (req, res) => {
       return res.status(500).json({ success: false, message: 'JWT_SECRET is not configured' });
     }
 
-    const passwordHash = hashDbPassword(password);
+    const passwordHash = await hashDbPassword(password);
     const result = await pool.query(
       `INSERT INTO users (email, password_hash)
        VALUES ($1, $2)
@@ -179,7 +182,7 @@ const login = async (req, res) => {
       logger.warn(`DB user lookup failed during login for: ${loginIdentifier}`, err);
     }
 
-    if (dbUser && verifyDbPassword(password, dbUser.password_hash)) {
+    if (dbUser && await verifyDbPassword(password, dbUser.password_hash)) {
       const token = createAuthToken(
         { id: dbUser.id, email: dbUser.email, role: dbUser.role },
         secret,

@@ -1,0 +1,26 @@
+{
+  "fixtureVersion": "1.0",
+  "scenarioId": "noisy-adversarial",
+  "class": "noisy_adversarial",
+  "target": {
+    "name": "shanming-tea",
+    "industry": "tea-retail"
+  },
+  "evidence": {
+    "competitors": [
+      { "name": "shancha", "source": "bing_news", "relevanceScore": 2.0 },
+      { "name": "play-now-777", "source": "spam_web", "relevanceScore": 1.9 },
+      { "name": "chaguji", "source": "duckduckgo", "relevanceScore": 1.8 }
+    ],
+    "marketReferences": [
+      { "title": "tea-halfyear-observation", "source": "report_archive", "confidence": 0.72 }
+    ],
+    "financialReferences": [
+      { "title": "ops-brief", "source": "finance_archive", "confidence": 0.7 }
+    ]
+  },
+  "constraints": {
+    "offlineOnly": true,
+    "deterministicSeed": "seed-noisy-001"
+  }
+}

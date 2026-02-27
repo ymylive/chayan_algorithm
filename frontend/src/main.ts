@@ -5,7 +5,7 @@ import 'element-plus/dist/index.css'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { BarChart, GaugeChart, LineChart, PieChart, RadarChart, ScatterChart } from 'echarts/charts'
+import { BarChart, GaugeChart, GraphChart, LineChart, PieChart, RadarChart, ScatterChart } from 'echarts/charts'
 import {
   AriaComponent,
   DataZoomComponent,
@@ -24,6 +24,7 @@ import './style.css'
 use([
   CanvasRenderer,
   GaugeChart,
+  GraphChart,
   LineChart,
   RadarChart,
   BarChart,

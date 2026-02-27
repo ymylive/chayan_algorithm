@@ -1,0 +1,13 @@
+{
+  "fixtureVersion": "1.0",
+  "scenarioId": "corrupt-input",
+  "class": "broken_type",
+  "target": {
+    "name": "broken-target"
+  },
+  "evidence": {
+    "competitors": "not-an-array",
+    "marketReferences": [],
+    "financialReferences": []
+  }
+}

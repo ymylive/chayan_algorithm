@@ -1,15 +1,0 @@
-  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
-                                 Dload  Upload  Total   Spent   Left   Speed
-  0      0   0      0   0      0      0      0                              0100     88 100     49 100     39   2868   2283                              0100     88 100     49 100     39   2830   2253                              0100     88 100     49 100     39   2797   2226                              0
-HTTP/1.1 401 Unauthorized
-X-Powered-By: Express
-Vary: Origin
-Access-Control-Allow-Credentials: true
-Content-Type: application/json; charset=utf-8
-Content-Length: 49
-ETag: W/"31-VmptvJVCxgMiCaKMQdd9IkNBIdc"
-Date: Sat, 14 Feb 2026 06:44:03 GMT
-Connection: keep-alive
-Keep-Alive: timeout=5
-
-{"success":false,"message":"Invalid credentials"}

@@ -35,6 +35,10 @@ describe('settingsController', () => {
     delete process.env.AI_TEMPERATURE;
     delete process.env.AI_MAX_TOKENS;
     delete process.env.AI_USE_MOCK;
+    delete process.env.AI_QUALITY_CONTRACT_ENABLED;
+    delete process.env.AI_QUALITY_STRICT_MODE;
+    delete process.env.AI_QUALITY_MIN_COVERAGE_SOURCES;
+    delete process.env.AI_QUALITY_POLICY_VERSION;
     await fs.promises.rm(settingsDir, { recursive: true, force: true });
   });
 
@@ -380,5 +384,198 @@ describe('settingsController', () => {
         tertiaryApiKey: '********'
       })
     });
+  });
+
+  test('normalizes quality feature-flag fields during settings update', async () => {
+    const existing = {
+      apiEndpoint: 'https://openrouter.ai/api/v1',
+      apiKey: 'primary-secret',
+      model: 'main/model',
+      protocol: 'responses',
+      fallbackModel: 'fallback/model',
+      modelFallbacks: '',
+      secondaryApiEndpoint: '',
+      secondaryProtocol: 'chat_completions',
+      secondaryApiKey: '',
+      secondaryModel: '',
+      tertiaryApiEndpoint: '',
+      tertiaryProtocol: 'chat_completions',
+      tertiaryApiKey: '',
+      tertiaryModel: '',
+      temperature: 0.35,
+      maxTokens: 1400,
+      useMock: false,
+      qualityContractEnabled: true,
+      qualityStrictMode: false,
+      qualityMinCoverageSources: 2
+    };
+
+    pool.query
+      .mockResolvedValueOnce({ rows: [{ settings_json: existing }] })
+      .mockResolvedValueOnce({ rows: [{ settings_json: existing }] });
+
+    const { updateSettings } = require('../src/controllers/settingsController');
+    const req = {
+      user: { id: 15, role: 'user' },
+      body: {
+        qualityContractEnabled: '0',
+        qualityStrictMode: 'yes',
+        qualityMinCoverageSources: '6'
+      }
+    };
+    const res = buildRes();
+
+    await updateSettings(req, res);
+
+    expect(pool.query).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO user_ai_settings'),
+      [15, expect.objectContaining({
+        qualityContractEnabled: false,
+        qualityStrictMode: true,
+        qualityMinCoverageSources: 6
+      })]
+    );
+    expect(res.json).toHaveBeenCalledWith({ success: true, message: 'Settings updated' });
+  });
+
+  test('rejects tuning update without baseline/candidate KPI evidence', async () => {
+    const { updateSettings } = require('../src/controllers/settingsController');
+    const req = {
+      user: { id: 19, role: 'user' },
+      body: {
+        qualityTuningDecision: {
+          inputs: {
+            onlineKpiTrend: {
+              trend: 'down',
+              windowSize: 4,
+              breachCount: 3,
+              maxBreachCount: 2
+            },
+            errorBuckets: {
+              timeout: 2
+            }
+          }
+        }
+      }
+    };
+    const res = buildRes();
+
+    await updateSettings(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({
+      success: false,
+      message: 'Tuning update rejected: baseline/candidate KPI delta evidence is required'
+    });
+    expect(pool.query).not.toHaveBeenCalled();
+  });
+
+  test('auto-disables quality contract when canary breach window triggers rollback', async () => {
+    const existing = {
+      apiEndpoint: 'https://openrouter.ai/api/v1',
+      apiKey: 'primary-secret',
+      model: 'main/model',
+      protocol: 'responses',
+      fallbackModel: 'fallback/model',
+      modelFallbacks: '',
+      secondaryApiEndpoint: '',
+      secondaryProtocol: 'chat_completions',
+      secondaryApiKey: '',
+      secondaryModel: '',
+      tertiaryApiEndpoint: '',
+      tertiaryProtocol: 'chat_completions',
+      tertiaryApiKey: '',
+      tertiaryModel: '',
+      temperature: 0.35,
+      maxTokens: 1400,
+      useMock: false,
+      qualityContractEnabled: true,
+      qualityStrictMode: false,
+      qualityMinCoverageSources: 2,
+      qualityPolicyVersion: 'quality-policy-v1',
+      qualityCanaryPolicy: {
+        enabled: true,
+        autoRollback: true,
+        breachWindowSize: 5,
+        maxBreachCount: 1
+      },
+      qualityTuningHistory: [],
+      qualityLastRollback: null
+    };
+
+    pool.query
+      .mockResolvedValueOnce({ rows: [{ settings_json: existing }] })
+      .mockResolvedValueOnce({ rows: [{ settings_json: existing }] });
+
+    const { updateSettings } = require('../src/controllers/settingsController');
+    const req = {
+      user: { id: 22, role: 'user' },
+      body: {
+        qualityPolicyVersion: 'quality-policy-v2',
+        qualityTuningDecision: {
+          inputs: {
+            offlineKpiDelta: {
+              baseline: {
+                relevance_precision: 0.81,
+                unsupported_claim_rate: 0.07
+              },
+              candidate: {
+                relevance_precision: 0.86,
+                unsupported_claim_rate: 0.09
+              }
+            },
+            onlineKpiTrend: {
+              trend: 'down',
+              windowSize: 5,
+              breachCount: 3,
+              maxBreachCount: 1
+            },
+            errorBuckets: {
+              timeout: 5,
+              unsupported_claim_detected: 2
+            }
+          },
+          adjustments: {
+            prompt: ['narrow-evidence-anchors'],
+            routing: ['primary->secondary when support ratio < 0.75'],
+            threshold: ['raise_min_coverage_sources_to_3']
+          }
+        }
+      }
+    };
+    const res = buildRes();
+
+    await updateSettings(req, res);
+
+    expect(pool.query).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO user_ai_settings'),
+      [22, expect.objectContaining({
+        qualityContractEnabled: false,
+        qualityPolicyVersion: 'quality-policy-v2',
+        qualityLastRollback: expect.objectContaining({
+          triggered: true,
+          reason: 'canary_kpi_breach_window',
+          action: 'qualityContractEnabled_auto_disabled',
+          canary: expect.objectContaining({
+            breachWindowSize: 5,
+            breachCount: 3,
+            maxBreachCount: 1
+          })
+        }),
+        qualityTuningHistory: expect.arrayContaining([
+          expect.objectContaining({
+            policyVersion: 'quality-policy-v2',
+            inputs: expect.objectContaining({
+              offlineKpiDelta: expect.objectContaining({
+                baseline: expect.objectContaining({ relevance_precision: 0.81 }),
+                candidate: expect.objectContaining({ relevance_precision: 0.86 }),
+                delta: expect.objectContaining({ relevance_precision: 0.05 })
+              })
+            })
+          })
+        ])
+      })]
+    );
+    expect(res.json).toHaveBeenCalledWith({ success: true, message: 'Settings updated' });
   });
 });

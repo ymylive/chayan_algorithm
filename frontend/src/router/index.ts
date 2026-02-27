@@ -40,7 +40,8 @@ const router = createRouter({
     { path: '/analysis', component: () => import('../views/Analysis.vue'), meta: { requiresAuth: true } },
     { path: '/recommendations', component: () => import('../views/Recommendations.vue'), meta: { requiresAuth: true } },
     { path: '/ai-analyze', component: () => import('../views/AIAnalyze.vue'), meta: { requiresAuth: true } },
-    { path: '/ai-settings', component: () => import('../views/AISettings.vue'), meta: { requiresAuth: true } }
+    { path: '/ai-settings', component: () => import('../views/AISettings.vue'), meta: { requiresAuth: true } },
+    { path: '/deep-research', component: () => import('../views/DeepResearch.vue'), meta: { requiresAuth: true } }
   ]
 })
 

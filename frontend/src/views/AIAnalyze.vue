@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="ai-analyze-page">
     <div class="content-shell">
       <el-card>
@@ -10,17 +10,17 @@
               </span>
               <div>
                 <div class="title-main">AI 智能分析</div>
-                <div class="title-sub">融合多源数据与数学模型，生成结构化分析报告与可执行建议</div>
+                <div class="title-sub">分步骤分析公司数据，支持离开页面后后台持续运行。</div>
               </div>
             </div>
           </div>
         </template>
 
         <el-form :model="form" label-width="120px" class="form-area">
-          <el-form-item label="AI分析对象">
+          <el-form-item label="分析对象">
             <el-input
               v-model="form.target"
-              placeholder="例如：新能源汽车、茶饮品牌A、某行业赛道"
+              placeholder="例如：茶颜悦色、特斯拉、苹果、华为"
               clearable
               @keyup.enter="runAnalyze"
             />
@@ -31,194 +31,145 @@
           </el-form-item>
 
           <div class="pipeline-hint">
-            <span class="pipeline-step">MCP 数据检索</span>
+            <span class="pipeline-step">识别竞品公司</span>
             <span class="pipeline-arrow">→</span>
-            <span class="pipeline-step">上传数据匹配</span>
+            <span class="pipeline-step">MCP 搜索信号</span>
             <span class="pipeline-arrow">→</span>
-            <span class="pipeline-step">熵权法 + TOPSIS</span>
+            <span class="pipeline-step">模型评分</span>
             <span class="pipeline-arrow">→</span>
-            <span class="pipeline-step">AI 深度解读</span>
+            <span class="pipeline-step">AI 叙事生成</span>
           </div>
         </el-form>
       </el-card>
 
+      <el-card v-if="activeJob" class="progress-card">
+        <template #header>
+          <div class="result-header">
+            <span class="result-icon">
+              <el-icon><Cpu /></el-icon>
+            </span>
+            <span>实时分析进度</span>
+          </div>
+        </template>
+
+        <div class="progress-head">
+          <el-tag :type="jobStatusTagType">{{ jobStatusText }}</el-tag>
+          <span class="progress-percent">{{ activeJobProgress }}%</span>
+        </div>
+        <el-progress :percentage="activeJobProgress" :status="jobProgressStatus" />
+        <p class="progress-message">{{ activeJobStepText }}</p>
+      </el-card>
+
+      <el-card class="history-card">
+        <template #header>
+          <div class="history-header">
+            <span class="result-icon">
+              <el-icon><Document /></el-icon>
+            </span>
+            <span>历史分析记录</span>
+            <el-button text class="history-refresh" @click="loadHistory">刷新</el-button>
+          </div>
+        </template>
+
+        <el-empty v-if="!historyLoading && !historyRows.length" description="暂无历史记录" />
+
+        <el-table
+          v-else
+          v-loading="historyLoading"
+          :data="historyRows"
+          border
+          stripe
+          size="small"
+          class="data-table"
+          :row-class-name="historyRowClassName"
+        >
+          <el-table-column prop="target" label="分析对象" min-width="180" show-overflow-tooltip />
+          <el-table-column prop="status" label="状态" width="120">
+            <template #default="scope">
+              <el-tag
+                :type="isCompletedStatus(scope.row.status) ? 'success' : (isFailedStatus(scope.row.status) ? 'danger' : 'warning')"
+                size="small"
+              >
+                {{ scope.row.status }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="progress" label="进度" width="90" />
+          <el-table-column prop="step" label="步骤" min-width="150" show-overflow-tooltip />
+          <el-table-column prop="createdAt" label="创建时间" min-width="180">
+            <template #default="scope">{{ formatHistoryTime(scope.row.createdAt) }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="120" fixed="right">
+            <template #default="scope">
+              <el-button
+                text
+                class="history-action"
+                :loading="historyResultLoadingJobId === scope.row.jobId"
+                :disabled="!isCompletedStatus(scope.row.status)"
+                @click="openHistoryResult(scope.row)"
+              >
+                查看结果
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-card>
+
       <el-card v-if="result" class="result-card">
-      <template #header>
-        <div class="result-header">
-          <span class="result-icon">
-            <el-icon><Document /></el-icon>
-          </span>
-          <span>分析报告</span>
+        <template #header>
+          <div class="result-header">
+            <span class="result-icon">
+              <el-icon><Document /></el-icon>
+            </span>
+            <span>分析报告</span>
+          </div>
+        </template>
+
+        <div class="summary-banner">
+          <div class="summary-title">摘要结论</div>
+          <div class="summary-text">{{ result.analysis?.summary || '暂无摘要' }}</div>
         </div>
-      </template>
 
-      <div class="summary-banner">
-        <div class="summary-title">摘要结论</div>
-        <div class="summary-text">{{ result.analysis.summary }}</div>
-      </div>
+        <div class="section">
+          <h4>多维分析图谱</h4>
+          <MultiDimensionalInsightPanel
+            title="LLM Insight Dashboard"
+            description="Quality, evidence completeness, competitive signals, and relationship network."
+            :data="insightPanelData"
+          />
+        </div>
 
-      <div class="section" v-if="kpiCards.length">
-        <h4 class="section-title-with-icon">
-          <span class="section-icon">
-            <el-icon><TrendCharts /></el-icon>
-          </span>
-          <span>核心指标</span>
-        </h4>
-        <div class="kpi-grid">
-          <el-card
-            v-for="(item, idx) in kpiCards"
-            :key="item.label"
-            shadow="never"
-            class="kpi-card"
-            :style="{ '--kpi-color': ['#1a73e8', '#34a853', '#fbbc04', '#ea4335', '#8e24aa'][idx % 5] }"
-          >
-            <div class="kpi-label">{{ item.label }}</div>
-            <div class="kpi-value">{{ item.value }}</div>
-            <div class="kpi-sub">{{ item.sub }}</div>
+        <div class="section" v-if="result.analysis?.aiNarrative">
+          <h4>AI 深度解读</h4>
+          <el-card shadow="never" class="narrative-card">
+            <StreamingNarrative :text="result.analysis.aiNarrative" :speed="streamSpeed" :autoplay="true" />
           </el-card>
-        </div>
-      </div>
 
-      <div class="section" v-if="result.analysis.aiNarrative">
-        <h4 class="section-title-with-icon">
-          <span class="section-icon">
-            <el-icon><Cpu /></el-icon>
-          </span>
-          <span>AI 深度解读</span>
-        </h4>
-        <el-card shadow="never" class="narrative-card">
-          <pre>{{ result.analysis.aiNarrative }}</pre>
-        </el-card>
-        <div class="ai-meta" v-if="result.analysis.aiMeta">
-          <el-tag size="small" type="info">模型：{{ result.analysis.aiMeta.modelUsed || '-' }}</el-tag>
-          <el-tag size="small" :type="result.analysis.aiMeta.degraded ? 'warning' : 'success'">
-            {{ result.analysis.aiMeta.degraded ? '降级输出' : '实时生成' }}
-          </el-tag>
-        </div>
-      </div>
-
-      <div class="section" v-if="result.peerAnalysis">
-        <h4>同行对标分析</h4>
-        <div class="chart-grid">
-          <div class="chart-item">
-            <h4>同行评分对比（Top10）</h4>
-            <v-chart v-if="peerBarOpt.series" :option="peerBarOpt" class="chart-canvas" />
-          </div>
-          <div class="chart-item">
-            <h4>同行行业结构（散点矩阵）</h4>
-            <v-chart v-if="peerIndustryBubbleOpt.series" :option="peerIndustryBubbleOpt" class="chart-canvas" />
-          </div>
-        </div>
-        <div class="table-wrap">
-          <el-table
-            v-if="result.peerAnalysis.peers?.length"
-            :data="result.peerAnalysis.peers"
-            border
-            stripe
-            size="small"
-            class="data-table"
-            :header-cell-style="{ background: '#fafafa', color: '#606266' }"
-          >
-            <el-table-column type="index" label="#" width="60" />
-            <el-table-column prop="name" label="同行对象" min-width="180" />
-            <el-table-column prop="industry" label="行业" />
-            <el-table-column prop="source" label="来源" width="120" />
-            <el-table-column prop="topsisScore" label="TOPSIS 分数" width="130" />
-          </el-table>
-        </div>
-      </div>
-
-      <div class="section">
-        <h4>关键结论</h4>
-        <ul class="insight-list">
-          <li v-for="(item, idx) in result.analysis.keyFindings" :key="idx" class="finding-item">{{ item }}</li>
-        </ul>
-      </div>
-
-      <div class="section">
-        <h4>建议动作</h4>
-        <ul class="insight-list">
-          <li v-for="(item, idx) in result.analysis.suggestions" :key="idx" class="suggestion-item">{{ item }}</li>
-        </ul>
-      </div>
-
-      <div class="section" v-if="result.model">
-        <h4>数学模型结果</h4>
-        <el-descriptions :column="1" border size="small">
-          <el-descriptions-item label="模型方法">{{ result.model.method }}</el-descriptions-item>
-          <el-descriptions-item label="趋势方向">
-            <el-tag :type="trendTagType(result.model.trendLabel)">
-              {{ trendLabelText(result.model.trendLabel) }}
+          <div class="ai-meta">
+            <el-tag size="small" type="info">模型：{{ result.analysis?.aiMeta?.modelUsed || '-' }}</el-tag>
+            <el-tag size="small" :type="result.analysis?.aiMeta?.degraded ? 'warning' : 'success'">
+              {{ result.analysis?.aiMeta?.degraded ? '降级输出' : '实时生成' }}
             </el-tag>
-          </el-descriptions-item>
-          <el-descriptions-item label="趋势斜率">{{ result.model.trendSlope }}</el-descriptions-item>
-        </el-descriptions>
-
-        <div class="chart-grid">
-          <div class="chart-item">
-            <h4>熵权指标贡献（柱状图）</h4>
-            <v-chart v-if="weightChartOpt.series" :option="weightChartOpt" class="chart-canvas" />
-          </div>
-
-          <div class="chart-item">
-            <h4>指标权重结构（雷达图）</h4>
-            <v-chart v-if="weightRadarOpt.series" :option="weightRadarOpt" class="chart-canvas" />
-          </div>
-
-          <div class="chart-item">
-            <h4>行业样本分布（环形图）</h4>
-            <v-chart v-if="industryPieOpt.series" :option="industryPieOpt" class="chart-canvas" />
-          </div>
-
-          <div class="chart-item">
-            <h4>行业集中度（Pareto）</h4>
-            <v-chart v-if="industryParetoOpt.series" :option="industryParetoOpt" class="chart-canvas" />
-          </div>
-
-          <div class="chart-item">
-            <h4>TOPSIS 排序（条形图）</h4>
-            <v-chart v-if="rankingChartOpt.series" :option="rankingChartOpt" class="chart-canvas" />
-          </div>
-
-          <div class="chart-item">
-            <h4>TOPSIS 分数趋势（折线图）</h4>
-            <v-chart v-if="scoreLineOpt.series" :option="scoreLineOpt" class="chart-canvas" />
-          </div>
-
-          <div class="chart-item">
-            <h4>分数区间分布（结构分析）</h4>
-            <v-chart v-if="scoreDistributionOpt.series" :option="scoreDistributionOpt" class="chart-canvas" />
-          </div>
-
-          <div class="chart-item">
-            <h4>行业质量分层（气泡散点）</h4>
-            <v-chart v-if="industryScatterOpt.series" :option="industryScatterOpt" class="chart-canvas" />
+            <el-tag size="small" type="info" v-if="qualityContract">质量分：{{ qualityContract.qualityScore ?? 0 }}</el-tag>
+            <el-tag size="small" :type="mcpHealthTagType" v-if="mcpHealthVisible">
+              MCP 检索：{{ mcpHealth?.usedFallback ? '含回退' : '正常' }}
+            </el-tag>
+            <el-tag
+              v-for="reason in mcpFallbackReasons"
+              :key="reason"
+              size="small"
+              type="warning"
+              effect="light"
+            >
+              {{ reason }}
+            </el-tag>
           </div>
         </div>
 
-        <h4>熵权法权重</h4>
-        <div class="table-wrap">
+        <div class="section" v-if="evidenceCompetitors.length">
+          <h4>竞品证据</h4>
           <el-table
-            v-if="result.model.weights?.length"
-            :data="result.model.weights"
-            border
-            stripe
-            size="small"
-            class="data-table"
-            :header-cell-style="{ background: '#fafafa', color: '#606266' }"
-          >
-            <el-table-column prop="metric" label="指标">
-              <template #default="scope">{{ metricLabel(scope.row.metric) }}</template>
-            </el-table-column>
-            <el-table-column prop="weight" label="权重" />
-          </el-table>
-        </div>
-
-        <h4>TOPSIS 排序（Top10）</h4>
-        <div class="table-wrap">
-          <el-table
-            v-if="result.model.ranking?.length"
-            :data="result.model.ranking"
+            :data="evidenceCompetitors"
             border
             stripe
             size="small"
@@ -226,631 +177,617 @@
             :header-cell-style="{ background: '#fafafa', color: '#606266' }"
           >
             <el-table-column type="index" label="#" width="60" />
-            <el-table-column prop="name" label="企业" />
-            <el-table-column prop="industry" label="行业" />
-            <el-table-column prop="topsisScore" label="TOPSIS 分数" />
+            <el-table-column prop="name" label="竞品" min-width="180" />
+            <el-table-column prop="source" label="来源" width="120" />
+            <el-table-column prop="relevanceScore" label="相关度" width="100" />
+            <el-table-column prop="url" label="URL" min-width="220" show-overflow-tooltip />
           </el-table>
         </div>
-      </div>
 
-      <div class="section">
-        <h4>上传数据概览</h4>
-        <p class="upload-overview">
-          命中记录：{{ result.uploaded.matchedCount }} 条，
-          参考记录：{{ result.uploaded.usedCount }} 条
-        </p>
-        <div class="table-wrap">
-          <el-table
-            v-if="result.uploaded.samples?.length"
-            :data="result.uploaded.samples"
-            border
-            stripe
-            size="small"
-            class="data-table"
-            :header-cell-style="{ background: '#fafafa', color: '#606266' }"
-          >
-            <el-table-column prop="id" label="ID" width="80" />
-            <el-table-column prop="name" label="企业名称" />
-            <el-table-column prop="industry" label="行业" />
-            <el-table-column prop="created_at" label="创建时间" />
-          </el-table>
+        <div class="section" v-if="result.analysis?.keyFindings?.length">
+          <h4>关键结论</h4>
+          <ul class="insight-list">
+            <li v-for="(item, idx) in result.analysis.keyFindings" :key="idx" class="finding-item">{{ item }}</li>
+          </ul>
         </div>
-      </div>
+
+        <div class="section" v-if="result.analysis?.suggestions?.length">
+          <h4>建议动作</h4>
+          <ul class="insight-list">
+            <li v-for="(item, idx) in result.analysis.suggestions" :key="idx" class="suggestion-item">{{ item }}</li>
+          </ul>
+        </div>
       </el-card>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import VChart from 'vue-echarts'
 import request from '../utils/request'
-
-type WeightItem = {
-  metric: string
-  weight: number
-}
-
-type RankingItem = {
-  id?: number
-  name: string
-  industry?: string
-  topsisScore: number
-}
+import MultiDimensionalInsightPanel from '../components/charts/MultiDimensionalInsightPanel.vue'
+import StreamingNarrative from '../components/llm/StreamingNarrative.vue'
+import {
+  useAnalysisStore,
+  type AnalysisHistoryRecord,
+  type AnalysisJobStatus,
+  type PendingAnalysisJob
+} from '../stores/analysis'
+import mcpFallbackReasonLabelMap from '@shared/mcp-fallback-reasons.json'
 
 const form = reactive({
   target: ''
 })
 
 const loading = ref(false)
-const result = ref<any>(null)
+const analysisStore = useAnalysisStore()
+const result = ref<any>(analysisStore.currentData || null)
+const historyLoading = ref(false)
+const historyResultLoadingJobId = ref('')
+const pollingRequestPending = ref(false)
+let pollingTimer: ReturnType<typeof setInterval> | null = null
 
-type AIAnalyzeApiResponse = {
-  success?: boolean
-  message?: string
-  error?: string
-  retryable?: boolean
-  retryAfter?: number
-  limitHint?: string
-  data?: any
+const AI_ANALYZE_PENDING_JOB_KEY = 'ai_analyze_pending_job_id'
+const AI_ANALYZE_PENDING_TARGET_KEY = 'ai_analyze_pending_target'
+const AI_JOB_POLL_INTERVAL_MS = 2000
+const COMPLETED_STATUS_SET = new Set(['completed', 'success', 'done'])
+const FAILED_STATUS_SET = new Set(['failed', 'error', 'aborted', 'cancelled'])
+const RUNNING_STATUS_SET = new Set(['running', 'processing', 'in_progress', 'queued', 'pending'])
+
+type NormalizedAnalyzeJob = {
+  jobId: string
+  target: string
+  status: AnalysisJobStatus | string
+  progress: number
+  step: string
+  message: string
+  createdAt: string
+  updatedAt: string
+  completedAt: string
+  result?: any
 }
 
-const AI_AUTO_RETRY_MAX = 1
+const activeJob = computed<PendingAnalysisJob | null>(() => analysisStore.pendingJob || null)
+const historyRows = computed<AnalysisHistoryRecord[]>(() => analysisStore.history || [])
 
-const waitFor = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+const hasResultPayload = (value: any) => {
+  if (!value || typeof value !== 'object') return false
+  return Boolean(value.analysis || value.model || value.uploaded || value.peerAnalysis || value.mcp)
+}
 
-const getRetryDelaySeconds = (err: any) => {
-  const fromBackend = Number(err?.response?.data?.retryAfter || 0)
-  if (Number.isFinite(fromBackend) && fromBackend > 0) {
-    return Math.min(Math.max(Math.round(fromBackend), 2), 30)
+const unwrapData = <T = any>(payload: any): T => {
+  if (payload && typeof payload === 'object' && payload.data !== undefined) {
+    return payload.data as T
   }
-  return 5
+  return payload as T
 }
 
-const safeNumber = (value: unknown, fallback = 0) => {
-  const num = Number(value)
-  return Number.isFinite(num) ? num : fallback
-}
-
-const formatPct = (value: number, digits = 1) => `${(safeNumber(value) * 100).toFixed(digits)}%`
-const formatFixed = (value: number, digits = 4) => safeNumber(value).toFixed(digits)
-
-const metricNameMap: Record<string, string> = {
-  relevance: '目标相关度',
-  industryHit: '行业匹配度',
-  competitorHit: '竞品关联度',
-  recency: '时效性'
-}
-
-const metricLabel = (metric: string) => metricNameMap[metric] || metric
-
-const trendLabelText = (label: string) => {
-  const map: Record<string, string> = {
-    up: '上升',
-    down: '下降',
-    stable: '稳定',
-    insufficient_data: '样本不足'
+const normalizeStatus = (value: unknown): AnalysisJobStatus | string => {
+  const normalized = String(value || '').trim().toLowerCase()
+  if (COMPLETED_STATUS_SET.has(normalized)) return 'completed'
+  if (FAILED_STATUS_SET.has(normalized)) return 'failed'
+  if (RUNNING_STATUS_SET.has(normalized)) {
+    if (normalized === 'pending' || normalized === 'queued') return 'pending'
+    return 'running'
   }
-  return map[label] || label
+  return normalized || 'unknown'
 }
 
-const trendTagType = (label: string) => {
-  if (label === 'up') return 'success'
-  if (label === 'down') return 'danger'
-  if (label === 'stable') return 'warning'
+const normalizeProgress = (value: unknown, status: AnalysisJobStatus | string) => {
+  const numeric = Number(value)
+  if (Number.isFinite(numeric)) {
+    const normalized = numeric > 1 ? numeric : numeric * 100
+    return Math.min(100, Math.max(0, Math.round(normalized)))
+  }
+  if (status === 'completed') return 100
+  return 0
+}
+
+const normalizeJobRecord = (raw: any, fallbackTarget = ''): NormalizedAnalyzeJob | null => {
+  if (!raw || typeof raw !== 'object') return null
+
+  const jobId = String(raw.jobId || raw.id || raw.job_id || '').trim()
+  if (!jobId) return null
+
+  const status = normalizeStatus(raw.status || raw.phase || raw.state)
+  const progress = normalizeProgress(raw.progress ?? raw.percent ?? raw.percentage, status)
+  const target = String(raw.target || raw.query || raw.topic || fallbackTarget || '').trim()
+  const resultPayload = hasResultPayload(raw.result) ? raw.result : undefined
+
+  return {
+    jobId,
+    target,
+    status,
+    progress,
+    step: String(raw.step || raw.stage || raw.currentStep || raw.workflowStep || '').trim(),
+    message: String(raw.message || raw.detail || raw.error || '').trim(),
+    createdAt: String(raw.createdAt || raw.created_at || '').trim(),
+    updatedAt: String(raw.updatedAt || raw.updated_at || '').trim(),
+    completedAt: String(raw.completedAt || raw.completed_at || '').trim(),
+    result: resultPayload
+  }
+}
+
+const extractJobList = (payload: any) => {
+  const root = unwrapData<any>(payload)
+  if (Array.isArray(root)) return root
+  if (Array.isArray(root?.jobs)) return root.jobs
+  if (Array.isArray(root?.items)) return root.items
+  if (Array.isArray(root?.records)) return root.records
+  if (Array.isArray(root?.data?.items)) return root.data.items
+  return []
+}
+
+const extractResultPayload = (payload: any) => {
+  const root = unwrapData<any>(payload)
+  if (hasResultPayload(root?.result)) return root.result
+  if (hasResultPayload(root)) return root
+  if (hasResultPayload(payload?.result)) return payload.result
+  return null
+}
+
+const persistPendingJob = (jobId: string, target: string) => {
+  if (typeof window === 'undefined') return
+  localStorage.setItem(AI_ANALYZE_PENDING_JOB_KEY, jobId)
+  localStorage.setItem(AI_ANALYZE_PENDING_TARGET_KEY, target)
+  sessionStorage.setItem(AI_ANALYZE_PENDING_JOB_KEY, jobId)
+  sessionStorage.setItem(AI_ANALYZE_PENDING_TARGET_KEY, target)
+}
+
+const readPersistedPendingJob = () => {
+  if (typeof window === 'undefined') return { jobId: '', target: '' }
+  const localJobId = localStorage.getItem(AI_ANALYZE_PENDING_JOB_KEY) || ''
+  const sessionJobId = sessionStorage.getItem(AI_ANALYZE_PENDING_JOB_KEY) || ''
+  const localTarget = localStorage.getItem(AI_ANALYZE_PENDING_TARGET_KEY) || ''
+  const sessionTarget = sessionStorage.getItem(AI_ANALYZE_PENDING_TARGET_KEY) || ''
+  return {
+    jobId: localJobId || sessionJobId,
+    target: localTarget || sessionTarget
+  }
+}
+
+const clearPersistedPendingJob = () => {
+  if (typeof window === 'undefined') return
+  localStorage.removeItem(AI_ANALYZE_PENDING_JOB_KEY)
+  localStorage.removeItem(AI_ANALYZE_PENDING_TARGET_KEY)
+  sessionStorage.removeItem(AI_ANALYZE_PENDING_JOB_KEY)
+  sessionStorage.removeItem(AI_ANALYZE_PENDING_TARGET_KEY)
+}
+
+const updatePendingJobState = (job: NormalizedAnalyzeJob | null) => {
+  if (!job) {
+    analysisStore.clearPendingJob()
+    return
+  }
+  analysisStore.setPendingJob({
+    jobId: job.jobId,
+    target: job.target,
+    status: job.status,
+    progress: job.progress,
+    step: job.step,
+    message: job.message,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt
+  })
+}
+
+const upsertHistory = (job: NormalizedAnalyzeJob) => {
+  analysisStore.upsertHistoryRecord({
+    jobId: job.jobId,
+    target: job.target,
+    status: String(job.status || 'unknown'),
+    progress: job.progress,
+    step: job.step,
+    message: job.message,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+    completedAt: job.completedAt,
+    result: job.result
+  })
+}
+
+const setAnalysisResult = (payload: any) => {
+  if (!payload) return
+  result.value = payload
+  analysisStore.setCurrentData(payload)
+}
+
+const isCompletedStatus = (status: unknown) => normalizeStatus(status) === 'completed'
+const isFailedStatus = (status: unknown) => normalizeStatus(status) === 'failed'
+
+const jobStatusTagType = computed(() => {
+  const status = normalizeStatus(activeJob.value?.status)
+  if (status === 'completed') return 'success'
+  if (status === 'failed') return 'danger'
+  if (status === 'running') return 'warning'
   return 'info'
+})
+
+const jobProgressStatus = computed(() => {
+  const status = normalizeStatus(activeJob.value?.status)
+  if (status === 'completed') return 'success'
+  if (status === 'failed') return 'exception'
+  return undefined
+})
+
+const activeJobProgress = computed(() => normalizeProgress(activeJob.value?.progress, activeJob.value?.status || 'unknown'))
+
+const jobStatusText = computed(() => {
+  const status = normalizeStatus(activeJob.value?.status)
+  if (status === 'pending') return 'Pending'
+  if (status === 'running') return 'Running'
+  if (status === 'completed') return 'Completed'
+  if (status === 'failed') return 'Failed'
+  return String(status || 'Unknown')
+})
+
+const activeJobStepText = computed(() => {
+  if (!activeJob.value) return ''
+  const segments = [activeJob.value.step, activeJob.value.message].map((item) => String(item || '').trim()).filter(Boolean)
+  return segments.join(' | ') || 'Background analysis is running.'
+})
+
+const formatHistoryTime = (value?: string) => {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString()
 }
 
-const weightsData = computed<WeightItem[]>(() => result.value?.model?.weights || [])
-const rankingData = computed<RankingItem[]>(() => result.value?.model?.ranking || [])
-const topIndustries = computed<{ name: string; count: number }[]>(() => result.value?.uploaded?.topIndustries || [])
+const historyRowClassName = ({ row }: { row: AnalysisHistoryRecord }) => (
+  isCompletedStatus(row.status) ? 'history-row is-completed' : 'history-row'
+)
 
-const rankingScores = computed(() => rankingData.value.map((item) => safeNumber(item.topsisScore)))
+const qualityContract = computed<any>(() => result.value?.analysis?.qualityContract || null)
+const qualityFeatureFlags = computed<any>(() => qualityContract.value?.featureFlags || {})
+const dataCompleteness = computed<any>(() => result.value?.analysis?.evidence?.dataCompleteness || null)
+const mcpHealth = computed<any>(() => result.value?.mcp?.mcpHealth || null)
+const mcpHealthVisible = computed(() => Boolean(mcpHealth.value && typeof mcpHealth.value === 'object'))
+const mcpHealthTagType = computed(() => (mcpHealth.value?.usedFallback ? 'warning' : 'success'))
+const mcpFallbackReasons = computed<string[]>(() => {
+  const reasons = Array.isArray(mcpHealth.value?.fallbackReasons)
+    ? mcpHealth.value.fallbackReasons
+    : []
+  const reasonMap = mcpFallbackReasonLabelMap as Record<string, string>
+  return reasons
+    .map((reason: unknown) => String(reason || '').trim())
+    .filter(Boolean)
+    .slice(0, 3)
+    .map((reason: string) => reasonMap[reason] || reason)
+})
 
-const standardDeviation = (values: number[]) => {
-  if (!values.length) return 0
-  const mean = values.reduce((sum, value) => sum + value, 0) / values.length
-  const variance = values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length
-  return Math.sqrt(variance)
+const evidenceCompetitors = computed<any[]>(() => result.value?.analysis?.evidence?.competitorTopSources || [])
+const streamSpeed = computed(() => (activeJob.value && !isCompletedStatus(activeJob.value.status) ? 14 : 18))
+
+const toSafeNumber = (value: unknown, fallback = 0) => {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return fallback
+  return numeric
 }
 
-const dashboardMetrics = computed(() => {
-  const sampleCount = safeNumber(result.value?.uploaded?.usedCount)
-  const matchedCount = safeNumber(result.value?.uploaded?.matchedCount)
-  const hitRate = sampleCount > 0 ? matchedCount / sampleCount : 0
+type CompetitorScore = {
+  name: string
+  score: number
+}
 
-  const scores = rankingScores.value
-  const scoreAvg = scores.length ? scores.reduce((sum, item) => sum + item, 0) / scores.length : 0
-  const scoreStd = standardDeviation(scores)
-  const scoreMax = scores.length ? Math.max(...scores) : 0
-  const scoreMin = scores.length ? Math.min(...scores) : 0
-  const leaderGap = scores.length > 1 ? safeNumber(scores[0]) - safeNumber(scores[1]) : scoreMax
+const clampPercent = (value: unknown, fallback = 0) => {
+  const numeric = toSafeNumber(value, fallback)
+  return Math.max(0, Math.min(100, Math.round(numeric)))
+}
 
-  return {
-    sampleCount,
-    matchedCount,
-    hitRate,
-    scoreAvg,
-    scoreStd,
-    scoreRange: scoreMax - scoreMin,
-    leaderGap,
-    trendSlope: safeNumber(result.value?.model?.trendSlope)
-  }
+const derivedTargetName = computed(() => {
+  const direct = String(result.value?.model?.target || '').trim()
+  if (direct) return direct
+  const pending = String(activeJob.value?.target || '').trim()
+  if (pending) return pending
+  return form.target.trim() || 'Target Enterprise'
 })
 
-const kpiCards = computed(() => {
-  if (!result.value?.model) return []
-  return [
-    {
-      label: '样本规模',
-      value: String(dashboardMetrics.value.sampleCount),
-      sub: `命中 ${dashboardMetrics.value.matchedCount} 条`
-    },
-    {
-      label: '命中率',
-      value: formatPct(dashboardMetrics.value.hitRate),
-      sub: '目标匹配样本占比'
-    },
-    {
-      label: 'TOPSIS均值',
-      value: formatFixed(dashboardMetrics.value.scoreAvg),
-      sub: `标准差 ${formatFixed(dashboardMetrics.value.scoreStd)}`
-    },
-    {
-      label: '头部优势',
-      value: formatFixed(dashboardMetrics.value.leaderGap),
-      sub: 'Top1 与 Top2 分差'
-    },
-    {
-      label: '趋势斜率',
-      value: formatFixed(dashboardMetrics.value.trendSlope),
-      sub: `趋势 ${trendLabelText(result.value?.model?.trendLabel || '')}`
-    }
-  ]
-})
+const insightPanelData = computed(() => {
+  const analysis = result.value?.analysis || {}
+  const competitorRows = Array.isArray(analysis?.evidence?.competitorTopSources)
+    ? analysis.evidence.competitorTopSources
+    : []
 
-const weightChartOpt = computed(() => {
-  if (!weightsData.value.length) return {}
-  return {
-    aria: { enabled: true },
-    animationDuration: 600,
-    toolbox: {
-      right: 8,
-      feature: { saveAsImage: {}, restore: {} }
-    },
-    tooltip: { trigger: 'axis' },
-    grid: { left: 20, right: 20, top: 30, bottom: 20, containLabel: true },
-    xAxis: {
-      type: 'category',
-      data: weightsData.value.map((item) => metricLabel(item.metric)),
-      axisLabel: { interval: 0, rotate: 20 }
-    },
-    yAxis: { type: 'value', min: 0, max: 1 },
-    series: [
-      {
-        type: 'bar',
-        data: weightsData.value.map((item) => safeNumber(item.weight)),
-        barMaxWidth: 36,
-        universalTransition: true,
-        label: { show: true, position: 'top' },
-        itemStyle: { color: '#409EFF' }
-      }
-    ]
-  }
-})
+  const qualityScore = clampPercent(analysis?.qualityContract?.qualityScore, 70)
+  const completenessScore = clampPercent(
+    analysis?.evidence?.dataCompleteness?.score ?? analysis?.evidence?.dataCompleteness?.ratio,
+    66
+  )
+  const mcpScore = mcpHealth.value?.usedFallback ? 52 : 85
+  const findingsScore = clampPercent(Array.isArray(analysis?.keyFindings) ? analysis.keyFindings.length * 18 : 0, 58)
+  const suggestionsScore = clampPercent(Array.isArray(analysis?.suggestions) ? analysis.suggestions.length * 18 : 0, 60)
 
-const weightRadarOpt = computed(() => {
-  if (!weightsData.value.length) return {}
-  return {
-    aria: { enabled: true },
-    tooltip: {},
-    radar: {
-      indicator: weightsData.value.map((item) => ({
-        name: metricLabel(item.metric),
-        max: 1
-      })),
-      splitArea: { areaStyle: { opacity: 0.9 } }
-    },
-    series: [
-      {
-        type: 'radar',
-        areaStyle: { opacity: 0.25 },
-        data: [
-          {
-            value: weightsData.value.map((item) => safeNumber(item.weight)),
-            name: '指标权重'
-          }
-        ]
-      }
-    ]
-  }
-})
-
-const industryPieOpt = computed(() => {
-  if (!topIndustries.value.length) return {}
-  return {
-    aria: { enabled: true },
-    tooltip: { trigger: 'item' },
-    legend: { bottom: 0 },
-    toolbox: {
-      right: 8,
-      feature: { saveAsImage: {}, restore: {} }
-    },
-    series: [
-      {
-        type: 'pie',
-        radius: ['35%', '65%'],
-        avoidLabelOverlap: true,
-        data: topIndustries.value.map((item) => ({ name: item.name, value: safeNumber(item.count) })),
-        label: { formatter: '{b}: {d}%' },
-        universalTransition: true
-      }
-    ]
-  }
-})
-
-const industryParetoOpt = computed(() => {
-  if (!topIndustries.value.length) return {}
-
-  const list = [...topIndustries.value]
-  const total = list.reduce((sum, item) => sum + safeNumber(item.count), 0) || 1
-  let cumulative = 0
-  const cumulativeRate = list.map((item) => {
-    cumulative += safeNumber(item.count)
-    return Number(((cumulative / total) * 100).toFixed(2))
-  })
-
-  return {
-    aria: { enabled: true },
-    tooltip: { trigger: 'axis' },
-    grid: { left: 40, right: 45, top: 20, bottom: 30, containLabel: true },
-    xAxis: {
-      type: 'category',
-      data: list.map((item) => item.name),
-      axisLabel: { interval: 0, rotate: 20 }
-    },
-    yAxis: [
-      { type: 'value', name: '样本数' },
-      { type: 'value', name: '累计占比', min: 0, max: 100, axisLabel: { formatter: '{value}%' } }
-    ],
-    series: [
-      {
-        name: '样本数',
-        type: 'bar',
-        data: list.map((item) => safeNumber(item.count)),
-        itemStyle: { color: '#5470C6' }
-      },
-      {
-        name: '累计占比',
-        type: 'line',
-        yAxisIndex: 1,
-        smooth: true,
-        data: cumulativeRate,
-        itemStyle: { color: '#EE6666' }
-      }
-    ]
-  }
-})
-
-const rankingChartOpt = computed(() => {
-  if (!rankingData.value.length) return {}
-
-  const list = [...rankingData.value].slice(0, 10).reverse()
-  return {
-    aria: { enabled: true },
-    animationDuration: 700,
-    toolbox: {
-      right: 8,
-      feature: { saveAsImage: {}, restore: {} }
-    },
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    grid: { left: 40, right: 20, top: 20, bottom: 20, containLabel: true },
-    xAxis: { type: 'value', min: 0, max: 1 },
-    yAxis: { type: 'category', data: list.map((item) => item.name) },
-    dataZoom: [
-      { type: 'inside', yAxisIndex: 0 },
-      { type: 'slider', yAxisIndex: 0, right: 0, width: 12 }
-    ],
-    series: [
-      {
-        type: 'bar',
-        data: list.map((item) => safeNumber(item.topsisScore)),
-        barMaxWidth: 24,
-        universalTransition: true,
-        itemStyle: { color: '#67C23A' }
-      }
-    ]
-  }
-})
-
-const scoreLineOpt = computed(() => {
-  if (!rankingData.value.length) return {}
-
-  const list = rankingData.value.slice(0, 10)
-  return {
-    aria: { enabled: true },
-    animationDuration: 700,
-    toolbox: {
-      right: 8,
-      feature: { saveAsImage: {}, restore: {} }
-    },
-    tooltip: { trigger: 'axis' },
-    grid: { left: 30, right: 20, top: 20, bottom: 30, containLabel: true },
-    xAxis: { type: 'category', data: list.map((item) => item.name), axisLabel: { rotate: 20 } },
-    yAxis: { type: 'value', min: 0, max: 1 },
-    series: [
-      {
-        type: 'line',
-        smooth: true,
-        data: list.map((item) => safeNumber(item.topsisScore)),
-        areaStyle: { opacity: 0.1 },
-        universalTransition: true,
-        symbol: 'circle',
-        symbolSize: 8,
-        itemStyle: { color: '#E6A23C' }
-      }
-    ]
-  }
-})
-
-const scoreDistributionOpt = computed(() => {
-  const scores = rankingScores.value
-  if (!scores.length) return {}
-
-  const bins = [
-    { label: '0.0-0.2', count: 0 },
-    { label: '0.2-0.4', count: 0 },
-    { label: '0.4-0.6', count: 0 },
-    { label: '0.6-0.8', count: 0 },
-    { label: '0.8-1.0', count: 0 }
+  const trendBase = [
+    clampPercent(qualityScore * 0.72 + completenessScore * 0.28, 70),
+    clampPercent(qualityScore * 0.78 + mcpScore * 0.22, 72),
+    clampPercent(qualityScore * 0.82 + findingsScore * 0.18, 74),
+    clampPercent(qualityScore * 0.86 + suggestionsScore * 0.14, 76),
+    clampPercent(qualityScore, 78)
   ]
 
-  scores.forEach((score) => {
-    const index = Math.min(4, Math.floor(score / 0.2))
-    const bucket = bins[index] || bins[bins.length - 1]
-    if (bucket) bucket.count += 1
-  })
+  const topCompetitors: CompetitorScore[] = competitorRows
+    .map((item: any, index: number) => ({
+      name: String(item?.name || item?.company || `Competitor ${index + 1}`).trim() || `Competitor ${index + 1}`,
+      score: toSafeNumber(item?.relevanceScore ?? item?.score ?? item?.weight, 0)
+    }))
+    .slice(0, 6)
 
-  const densities = bins.map((item) => Number((item.count / scores.length).toFixed(4)))
-  return {
-    aria: { enabled: true },
-    tooltip: { trigger: 'axis' },
-    grid: { left: 40, right: 40, top: 20, bottom: 30, containLabel: true },
-    xAxis: {
-      type: 'category',
-      data: bins.map((item) => item.label)
-    },
-    yAxis: [
-      { type: 'value', name: '样本数' },
-      { type: 'value', name: '占比', min: 0, max: 1, axisLabel: { formatter: '{value}' } }
-    ],
-    series: [
-      {
-        type: 'bar',
-        name: '样本数',
-        data: bins.map((item) => item.count),
-        itemStyle: { color: '#91CC75' }
-      },
-      {
-        type: 'line',
-        name: '占比',
-        yAxisIndex: 1,
-        smooth: true,
-        data: densities,
-        itemStyle: { color: '#73C0DE' }
-      }
-    ]
-  }
-})
+  const barCategories = topCompetitors.length
+    ? topCompetitors.map((item: CompetitorScore) => item.name)
+    : ['Competitor A', 'Competitor B', 'Competitor C']
+  const barValues = topCompetitors.length
+    ? topCompetitors.map((item: CompetitorScore) => Number(item.score.toFixed(2)))
+    : [72, 64, 58]
 
-const industryScoreMatrix = computed(() => {
-  const map = new Map<string, number[]>()
-  rankingData.value.forEach((item) => {
-    const key = item.industry || '未分类'
-    const bucket = map.get(key) || []
-    bucket.push(safeNumber(item.topsisScore))
-    map.set(key, bucket)
-  })
+  const graphNodes = [
+    { id: 'target', name: derivedTargetName.value, category: 0, symbolSize: 62, value: 100 }
+  ]
+  const graphLinks: Array<{ source: string; target: string; value: number }> = []
 
-  return Array.from(map.entries())
-    .map(([industry, scores]) => {
-      const count = scores.length
-      const avg = scores.reduce((sum, value) => sum + value, 0) / (count || 1)
-      const max = Math.max(...scores)
-      return { industry, count, avg, max }
+  topCompetitors.forEach((item: CompetitorScore, index: number) => {
+    const nodeId = `competitor-${index}`
+    graphNodes.push({
+      id: nodeId,
+      name: item.name,
+      category: 1,
+      symbolSize: Math.max(32, Math.min(48, 30 + item.score / 3)),
+      value: item.score
     })
-    .sort((a, b) => b.count - a.count)
-})
+    graphLinks.push({
+      source: 'target',
+      target: nodeId,
+      value: Number(item.score.toFixed(2))
+    })
+  })
 
-const industryScatterOpt = computed(() => {
-  if (!industryScoreMatrix.value.length) return {}
+  if (!topCompetitors.length) {
+    ;['Signal', 'Model', 'Narrative'].forEach((name, index) => {
+      const nodeId = `system-${index}`
+      graphNodes.push({ id: nodeId, name, category: 2, symbolSize: 36, value: 70 - index * 6 })
+      graphLinks.push({ source: 'target', target: nodeId, value: 65 - index * 8 })
+    })
+  }
 
   return {
-    aria: { enabled: true },
-    tooltip: {
-      trigger: 'item',
-      formatter: (params: any) => {
-        const [avg, count, max, industry] = params.data
-        return `${industry}<br/>均值: ${formatFixed(avg)}<br/>入榜样本: ${count}<br/>最高分: ${formatFixed(max)}`
-      }
+    radar: {
+      indicators: [
+        { name: 'Quality', max: 100 },
+        { name: 'Evidence', max: 100 },
+        { name: 'MCP Reliability', max: 100 },
+        { name: 'Findings', max: 100 },
+        { name: 'Suggestions', max: 100 }
+      ],
+      values: [qualityScore, completenessScore, mcpScore, findingsScore, suggestionsScore],
+      seriesName: 'AI Insight Quality'
     },
-    grid: { left: 50, right: 20, top: 20, bottom: 30, containLabel: true },
-    xAxis: { type: 'value', min: 0, max: 1, name: '平均TOPSIS分数' },
-    yAxis: { type: 'value', min: 0, name: '入榜样本数' },
-    visualMap: {
-      dimension: 2,
-      min: 0,
-      max: 1,
-      orient: 'horizontal',
-      right: 0,
-      top: 0,
-      text: ['高分', '低分'],
-      inRange: {
-        color: ['#91cc75', '#5470c6', '#ee6666']
-      }
+    line: {
+      categories: ['Signal', 'Model', 'Narrative', 'Action', 'Final'],
+      values: trendBase,
+      seriesName: 'Pipeline Momentum',
+      unit: 'score'
     },
-    series: [
-      {
-        type: 'scatter',
-        data: industryScoreMatrix.value.map((item) => [item.avg, item.count, item.max, item.industry]),
-        symbolSize: (value: number[]) => 10 + safeNumber(value?.[1]) * 6,
-        label: {
-          show: true,
-          formatter: (params: any) => params.data?.[3]
-        }
-      }
-    ]
+    bar: {
+      categories: barCategories,
+      values: barValues,
+      seriesName: 'Competitor Relevance',
+      unit: 'score'
+    },
+    graph: {
+      categories: [
+        { name: 'Target' },
+        { name: 'Competitor' },
+        { name: 'System' }
+      ],
+      nodes: graphNodes,
+      links: graphLinks,
+      seriesName: 'Competitive Network'
+    }
   }
 })
+void qualityFeatureFlags
+void dataCompleteness
 
-const peerBarOpt = computed(() => {
-  const peers = result.value?.peerAnalysis?.peers || []
-  if (!peers.length) return {}
-
-  const list = [...peers]
-    .sort((a: any, b: any) => safeNumber(b.topsisScore) - safeNumber(a.topsisScore))
-    .slice(0, 10)
-    .reverse()
-
-  return {
-    aria: { enabled: true },
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    grid: { left: 60, right: 20, top: 20, bottom: 25, containLabel: true },
-    xAxis: { type: 'value', min: 0, max: 1 },
-    yAxis: { type: 'category', data: list.map((item: any) => item.name) },
-    series: [
-      {
-        type: 'bar',
-        data: list.map((item: any) => safeNumber(item.topsisScore)),
-        itemStyle: { color: '#8e44ad' },
-        barMaxWidth: 24
-      }
-    ]
+const stopPolling = () => {
+  if (pollingTimer) {
+    clearInterval(pollingTimer)
+    pollingTimer = null
   }
-})
+}
 
-const peerIndustryBubbleOpt = computed(() => {
-  const stats = result.value?.peerAnalysis?.industryStats || []
-  if (!stats.length) return {}
+const normalizeJobPayload = (payload: any, fallbackTarget = '') => {
+  const root = unwrapData<any>(payload)
+  const candidate = root?.item || root?.job || root
+  return normalizeJobRecord(candidate, fallbackTarget)
+}
 
-  return {
-    aria: { enabled: true },
-    tooltip: {
-      trigger: 'item',
-      formatter: (params: any) => {
-        const [avgScore, count, maxScore, industry] = params.data
-        return `${industry}<br/>均分: ${formatFixed(avgScore)}<br/>样本数: ${count}<br/>最高分: ${formatFixed(maxScore)}`
-      }
-    },
-    grid: { left: 50, right: 20, top: 20, bottom: 30, containLabel: true },
-    xAxis: { type: 'value', min: 0, max: 1, name: '行业均分' },
-    yAxis: { type: 'value', min: 0, name: '行业样本数' },
-    series: [
-      {
-        type: 'scatter',
-        data: stats.map((item: any) => [
-          safeNumber(item.avgTopsisScore),
-          safeNumber(item.count),
-          safeNumber(item.maxTopsisScore),
-          item.industry
-        ]),
-        symbolSize: (value: number[]) => 12 + safeNumber(value?.[1]) * 4,
-        label: {
-          show: true,
-          formatter: (params: any) => params.data?.[3]
-        },
-        itemStyle: {
-          color: '#f39c12'
-        }
-      }
-    ]
+const fetchJobResult = async (jobId: string, silentError = false) => {
+  if (!jobId) return null
+  try {
+    const response = await request.get(`/mcp/ai-analyze/jobs/${encodeURIComponent(jobId)}/result`)
+    const resolved = extractResultPayload(response)
+    if (resolved) {
+      setAnalysisResult(resolved)
+      return resolved
+    }
+  } catch (err: any) {
+    if (!silentError) {
+      const backendMessage = err?.response?.data?.message || err?.response?.data?.error
+      ElMessage.error(backendMessage || '加载历史分析结果失败')
+    }
   }
-})
+  return null
+}
+
+const applyJobState = async (job: NormalizedAnalyzeJob, options: { fromPolling?: boolean } = {}) => {
+  updatePendingJobState(job)
+  upsertHistory(job)
+
+  if (isCompletedStatus(job.status)) {
+    const resolvedResult = hasResultPayload(job.result) ? job.result : await fetchJobResult(job.jobId, true)
+    if (resolvedResult) {
+      setAnalysisResult(resolvedResult)
+      upsertHistory({
+        ...job,
+        result: resolvedResult
+      })
+    }
+    clearPersistedPendingJob()
+    analysisStore.clearPendingJob()
+    if (options.fromPolling) {
+      ElMessage.success('AI 分析已完成')
+    }
+    stopPolling()
+    return
+  }
+
+  if (isFailedStatus(job.status)) {
+    clearPersistedPendingJob()
+    analysisStore.clearPendingJob()
+    stopPolling()
+    ElMessage.error(job.message || 'AI 分析任务执行失败')
+  }
+}
+
+const fetchJobStatus = async (jobId: string, options: { silent?: boolean } = {}) => {
+  if (!jobId || pollingRequestPending.value) return
+  pollingRequestPending.value = true
+  try {
+    const response = await request.get(`/mcp/ai-analyze/jobs/${encodeURIComponent(jobId)}`)
+    const normalized = normalizeJobPayload(response)
+    if (!normalized) return
+    await applyJobState(normalized, { fromPolling: true })
+  } catch (err: any) {
+    if (!options.silent) {
+      const backendMessage = err?.response?.data?.message || err?.response?.data?.error
+      ElMessage.error(backendMessage || '查询分析进度失败')
+    }
+  } finally {
+    pollingRequestPending.value = false
+  }
+}
+
+const startPolling = (jobId: string) => {
+  if (!jobId) return
+  stopPolling()
+  void fetchJobStatus(jobId)
+  pollingTimer = setInterval(() => {
+    void fetchJobStatus(jobId, { silent: true })
+  }, AI_JOB_POLL_INTERVAL_MS)
+}
+
+const loadHistory = async () => {
+  historyLoading.value = true
+  try {
+    const response = await request.get('/mcp/ai-analyze/jobs', {
+      params: { limit: 30, offset: 0 }
+    })
+    const list = extractJobList(response)
+    const normalized = list
+      .map((item: any) => normalizeJobRecord(item))
+      .filter((item: NormalizedAnalyzeJob | null): item is NormalizedAnalyzeJob => Boolean(item))
+
+    const rows = normalized.map((item: NormalizedAnalyzeJob) => ({
+      jobId: item.jobId,
+      target: item.target,
+      status: String(item.status || 'unknown'),
+      progress: item.progress,
+      step: item.step,
+      message: item.message,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+      completedAt: item.completedAt,
+      result: item.result
+    }))
+
+    analysisStore.setHistory(rows)
+  } catch (err: any) {
+    const backendMessage = err?.response?.data?.message || err?.response?.data?.error
+    ElMessage.error(backendMessage || '加载历史分析记录失败')
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+const openHistoryResult = async (row: AnalysisHistoryRecord) => {
+  if (!row?.jobId) return
+  if (row.result && hasResultPayload(row.result)) {
+    setAnalysisResult(row.result)
+    return
+  }
+
+  historyResultLoadingJobId.value = row.jobId
+  try {
+    const loaded = await fetchJobResult(row.jobId)
+    if (loaded) {
+      analysisStore.upsertHistoryRecord({
+        ...row,
+        result: loaded
+      })
+    }
+  } finally {
+    historyResultLoadingJobId.value = ''
+  }
+}
+
+const restorePendingJob = async () => {
+  const persisted = readPersistedPendingJob()
+  if (!persisted.jobId) return
+  updatePendingJobState({
+    jobId: persisted.jobId,
+    target: persisted.target,
+    status: 'running',
+    progress: 0,
+    step: '',
+    message: 'Resuming analysis progress...',
+    createdAt: '',
+    updatedAt: '',
+    completedAt: ''
+  })
+  startPolling(persisted.jobId)
+}
+
+const startAnalyzeJob = async (target: string) => {
+  const response = await request.post('/mcp/ai-analyze/jobs', { target })
+  const normalized = normalizeJobPayload(response, target)
+  if (!normalized) {
+    throw new Error('Invalid AI analyze job response')
+  }
+
+  persistPendingJob(normalized.jobId, target)
+  await applyJobState(normalized)
+  startPolling(normalized.jobId)
+}
 
 const runAnalyze = async () => {
-  if (!form.target.trim()) {
+  const target = form.target.trim()
+  if (!target) {
     ElMessage.warning('请先填写 AI 分析对象')
     return
   }
 
   loading.value = true
-  const target = form.target.trim()
-  let lastError: any = null
-
   try {
-    for (let attempt = 0; attempt <= AI_AUTO_RETRY_MAX; attempt++) {
-      try {
-        const response = await request.post('/mcp/ai-analyze', { target })
-        const payload = response as AIAnalyzeApiResponse | { data?: AIAnalyzeApiResponse }
-        const res: AIAnalyzeApiResponse =
-          (payload as AIAnalyzeApiResponse)?.success !== undefined
-            ? (payload as AIAnalyzeApiResponse)
-            : ((payload as { data?: AIAnalyzeApiResponse })?.data || {})
-
-        if (!res?.success) {
-          throw new Error(res?.message || res?.error || '分析失败')
-        }
-
-        result.value = res.data
-        ElMessage.success(attempt > 0 ? 'AI 分析完成（已自动重试）' : 'AI 分析完成')
-        return
-      } catch (err: any) {
-        lastError = err
-        const status = Number(err?.response?.status || 0)
-        const retryable = Boolean(err?.response?.data?.retryable) || status === 429 || status === 504
-
-        if (retryable && attempt < AI_AUTO_RETRY_MAX) {
-          const waitSeconds = getRetryDelaySeconds(err)
-          ElMessage.warning(`AI 限流，${waitSeconds} 秒后自动重试...`)
-          await waitFor(waitSeconds * 1000)
-          continue
-        }
-
-        break
-      }
-    }
-
-    const backendMessage = lastError?.response?.data?.message || lastError?.response?.data?.error
-    const limitHint = lastError?.response?.data?.limitHint
-    const isNetworkError = !lastError?.response && (
-      lastError?.code === 'ERR_NETWORK' ||
-      /network error/i.test(String(lastError?.message || ''))
-    )
-
-    if (isNetworkError) {
-      ElMessage.warning('网络连接异常，正在自动重试一次...')
-      await waitFor(4000)
-      try {
-        const retryResponse = await request.post('/mcp/ai-analyze', { target })
-        const retryPayload = retryResponse as AIAnalyzeApiResponse | { data?: AIAnalyzeApiResponse }
-        const retryRes: AIAnalyzeApiResponse =
-          (retryPayload as AIAnalyzeApiResponse)?.success !== undefined
-            ? (retryPayload as AIAnalyzeApiResponse)
-            : ((retryPayload as { data?: AIAnalyzeApiResponse })?.data || {})
-        if (retryRes?.success) {
-          result.value = retryRes.data
-          ElMessage.success('AI 分析完成（网络恢复后自动重试成功）')
-          return
-        }
-      } catch {
-        // fallthrough to final network guidance
-      }
-      ElMessage.error('网络连接异常：请使用 https://chayan.cornna.xyz（不要用 https://82.158.88.34:3000）')
-      return
-    }
-
-    if (limitHint === 'provider_rate_limited') {
-      ElMessage.error(backendMessage || 'AI 服务限流，请稍后重试')
-    } else if (limitHint === 'provider_timeout') {
-      ElMessage.error(backendMessage || 'AI 服务响应超时，请稍后重试')
-    } else {
-      ElMessage.error(backendMessage || lastError?.message || 'AI 分析失败')
-    }
+    await startAnalyzeJob(target)
+    await loadHistory()
+    ElMessage.success('分析任务已提交，后台正在持续执行')
+  } catch (err: any) {
+    const backendMessage = err?.response?.data?.message || err?.response?.data?.error
+    ElMessage.error(backendMessage || err?.message || '提交分析任务失败')
   } finally {
     loading.value = false
   }
 }
+
+onMounted(async () => {
+  await loadHistory()
+  await restorePendingJob()
+})
+
+onUnmounted(() => {
+  stopPolling()
+})
 </script>
 
 <style scoped>
@@ -876,14 +813,14 @@ const runAnalyze = async () => {
 }
 
 .title-icon,
-.result-icon,
-.section-icon {
+.result-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
-.title-icon {
+.title-icon,
+.result-icon {
   width: 34px;
   height: 34px;
   border-radius: 8px;
@@ -930,6 +867,8 @@ const runAnalyze = async () => {
   font-size: 13px;
 }
 
+.progress-card,
+.history-card,
 .result-card {
   margin-top: 20px;
 }
@@ -943,13 +882,51 @@ const runAnalyze = async () => {
   color: #303133;
 }
 
+.progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.progress-percent {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a73e8;
+}
+
+.progress-message {
+  margin: 12px 0 0;
+  color: #606266;
+  line-height: 1.6;
+}
+
+.history-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.history-refresh,
+.history-action {
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.history-refresh {
+  margin-left: auto;
+}
+
+.history-action:disabled {
+  cursor: not-allowed;
+}
+
 .summary-banner {
   padding: 14px 16px;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
   border-left: 4px solid #1a73e8;
   border-radius: 8px;
   background: linear-gradient(90deg, #f5f9ff 0%, #ffffff 65%);
-  box-shadow: 0 1px 4px rgba(26, 115, 232, 0.08);
 }
 
 .summary-title {
@@ -965,7 +942,7 @@ const runAnalyze = async () => {
 }
 
 .section {
-  margin-top: 28px;
+  margin-top: 24px;
 }
 
 .section h4 {
@@ -975,59 +952,6 @@ const runAnalyze = async () => {
   padding-bottom: 10px;
   border-bottom: 1px solid #f0f0f0;
   margin: 0 0 16px;
-}
-
-.section-title-with-icon {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.kpi-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 16px;
-  align-items: stretch;
-}
-
-.kpi-card {
-  height: 100%;
-  border-radius: 8px;
-  text-align: center;
-  transition: all 0.3s;
-  border-top: 3px solid var(--kpi-color, #1a73e8);
-}
-
-.kpi-card :deep(.el-card__body) {
-  height: 100%;
-  min-height: 140px;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-}
-
-.kpi-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-}
-
-.kpi-label {
-  font-size: 12px;
-  color: #909399;
-}
-
-.kpi-value {
-  font-size: 28px;
-  font-weight: 700;
-  margin: 8px 0;
-  color: var(--kpi-color, #303133);
-  line-height: 1.2;
-}
-
-.kpi-sub {
-  font-size: 12px;
-  color: #b1b4bb;
 }
 
 .narrative-card {
@@ -1045,60 +969,22 @@ const runAnalyze = async () => {
   color: #303133;
 }
 
+.narrative-card :deep(.streaming-narrative) {
+  min-height: 48px;
+  color: #303133;
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.section :deep(.multi-panel) {
+  margin-top: 12px;
+}
+
 .ai-meta {
   margin-top: 12px;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-}
-
-.chart-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
-  gap: 20px;
-  margin-top: 16px;
-  align-items: stretch;
-}
-
-.chart-item {
-  min-width: 0;
-  overflow: hidden;
-  border-radius: 10px;
-  padding: 16px;
-  background: #fff;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
-}
-
-.chart-item h4 {
-  font-size: 16px;
-  font-weight: 600;
-  color: #303133;
-  padding-bottom: 10px;
-  border-bottom: 1px solid #f0f0f0;
-  margin: 0 0 16px;
-}
-
-.chart-canvas {
-  height: 320px;
-}
-
-.data-table {
-  width: 100%;
-}
-
-.table-wrap {
-  margin-top: 12px;
-  overflow-x: auto;
-}
-
-.table-wrap .data-table {
-  min-width: 620px;
-}
-
-.upload-overview {
-  margin: 0;
-  color: #606266;
-  line-height: 1.7;
 }
 
 .insight-list {
@@ -1138,23 +1024,6 @@ const runAnalyze = async () => {
   .ai-analyze-page {
     padding: 18px;
   }
-
-  .form-area {
-    max-width: 100%;
-  }
-
-  .section {
-    margin-top: 22px;
-  }
-
-  .chart-grid {
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 16px;
-  }
-
-  .table-wrap .data-table {
-    min-width: 560px;
-  }
 }
 
 @media (max-width: 768px) {
@@ -1186,58 +1055,8 @@ const runAnalyze = async () => {
     margin-left: 0 !important;
   }
 
-  .pipeline-hint {
-    margin-top: 2px;
-    gap: 6px;
-  }
-
-  .pipeline-step {
-    line-height: 1.3;
-  }
-
   .pipeline-arrow {
     display: none;
-  }
-
-  .section {
-    margin-top: 18px;
-  }
-
-  .section h4 {
-    font-size: 15px;
-    margin-bottom: 12px;
-    padding-bottom: 8px;
-  }
-
-  .kpi-grid {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-
-  .kpi-card :deep(.el-card__body) {
-    min-height: 132px;
-    padding: 16px;
-  }
-
-  .chart-grid {
-    grid-template-columns: 1fr;
-    gap: 14px;
-  }
-
-  .chart-item {
-    padding: 12px;
-  }
-
-  .chart-canvas {
-    height: 270px;
-  }
-
-  .table-wrap {
-    margin-top: 10px;
-  }
-
-  .table-wrap .data-table {
-    min-width: 520px;
   }
 }
 </style>

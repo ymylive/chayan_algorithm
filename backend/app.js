@@ -9,6 +9,7 @@ const settingsController = require('./src/controllers/settingsController');
 const analyzeController = require('./src/controllers/analyzeController');
 const { upload, handleUpload } = require('./src/controllers/uploadController');
 const mcpController = require('./src/controllers/mcpController');
+const deepResearchController = require('./src/controllers/deepResearchController');
 const enterpriseController = require('./src/controllers/enterpriseController');
 const analysisController = require('./src/controllers/analysisController');
 const recommendationController = require('./src/controllers/recommendationController');
@@ -113,6 +114,7 @@ app.use(cors(corsOptions));
 app.use(express.json());
 
 app.get('/health', healthController.healthCheck);
+app.get('/api/health', healthController.healthCheck);
 
 // Public authentication endpoints
 app.post('/api/auth/register', authController.register);
@@ -129,6 +131,13 @@ app.post('/api/analyze', analyzeController.analyze);
 app.get('/api/mcp/search', mcpController.search);
 app.post('/api/mcp/fetch', mcpController.fetch);
 app.post('/api/mcp/ai-analyze', mcpController.aiAnalyze);
+app.post('/api/mcp/ai-analyze/jobs', mcpController.startAiAnalyzeJob);
+app.get('/api/mcp/ai-analyze/jobs', mcpController.listAiAnalyzeJobs);
+app.get('/api/mcp/ai-analyze/jobs/:jobId', mcpController.getAiAnalyzeJob);
+app.get('/api/mcp/ai-analyze/jobs/:jobId/result', mcpController.getAiAnalyzeJobResult);
+app.post('/api/research/deep', deepResearchController.conductDeepResearch);
+app.get('/api/research/progress/:jobId', deepResearchController.getResearchProgress);
+app.get('/api/research/result/:jobId', deepResearchController.getResearchResult);
 app.get('/api/enterprises', enterpriseController.getEnterprises);
 app.get('/api/enterprises/:id', enterpriseController.getEnterpriseById);
 app.post('/api/enterprises', enterpriseController.createEnterprise);

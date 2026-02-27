@@ -73,11 +73,113 @@ describe('aiService.searchCompetitors', () => {
       competitors: [{ name: '竞品A', market_share: '15%' }]
     });
   });
+
+  test('returns explicit mcp_payload_invalid fallback when MCP payload shape is invalid', async () => {
+    const aiService = loadService();
+    const redis = require('../src/config/redis');
+    process.env.AI_MCP_USE_MOCK_FALLBACK = 'false';
+    process.env.AI_USE_MOCK = 'false';
+
+    const mockClient = {
+      callTool: jest.fn().mockResolvedValue({ foo: 'bar' })
+    };
+    jest.spyOn(aiService, 'connectMCP').mockResolvedValue(mockClient);
+
+    const result = await aiService.searchCompetitors('新能源');
+
+    expect(mockClient.callTool).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(expect.objectContaining({
+      query: '新能源',
+      competitors: [],
+      meta: expect.objectContaining({
+        partialFailure: true,
+        reason: 'mcp_payload_invalid'
+      })
+    }));
+    expect(redis.setex).toHaveBeenCalledWith(
+      expect.stringMatching(/^competitor:/),
+      expect.any(Number),
+      expect.stringContaining('mcp_payload_invalid')
+    );
+  });
+
+  test('returns explicit mcp_payload_invalid fallback for regulatory filings when MCP payload shape is invalid', async () => {
+    const aiService = loadService();
+    const redis = require('../src/config/redis');
+    process.env.AI_MCP_USE_MOCK_FALLBACK = 'false';
+    process.env.AI_USE_MOCK = 'false';
+
+    const mockClient = {
+      callTool: jest.fn().mockResolvedValue({ foo: 'bar' })
+    };
+    jest.spyOn(aiService, 'connectMCP').mockResolvedValue(mockClient);
+
+    const result = await aiService.fetchRegulatoryFilings({
+      company: 'Acme Corp',
+      ticker: 'ACME',
+      timeframe: '12m'
+    });
+
+    expect(mockClient.callTool).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(expect.objectContaining({
+      company: 'Acme Corp',
+      filings: [],
+      meta: expect.objectContaining({
+        partialFailure: true,
+        reason: 'mcp_payload_invalid'
+      })
+    }));
+    expect(redis.setex).toHaveBeenCalledWith(
+      expect.stringMatching(/^filings:/),
+      expect.any(Number),
+      expect.stringContaining('mcp_payload_invalid')
+    );
+  });
+
+  test('invalid cached MCP payload is deleted before live MCP retry', async () => {
+    const aiService = loadService();
+    const redis = require('../src/config/redis');
+    process.env.AI_MCP_USE_MOCK_FALLBACK = 'false';
+    process.env.AI_USE_MOCK = 'false';
+
+    redis.get.mockResolvedValueOnce(JSON.stringify({ foo: 'bar' }));
+
+    const livePayload = {
+      structuredContent: {
+        query: '新能源',
+        competitors: [{ name: '竞品A', source: 'bing_web', relevanceScore: 2.1 }],
+        meta: {
+          sourceCounts: { bing_web: 1 },
+          sourcesUsed: ['bing_web'],
+          partialFailure: false
+        }
+      }
+    };
+    const mockClient = {
+      callTool: jest.fn().mockResolvedValue(livePayload)
+    };
+    jest.spyOn(aiService, 'connectMCP').mockResolvedValue(mockClient);
+
+    const result = await aiService.searchCompetitors('新能源');
+
+    expect(redis.del).toHaveBeenCalledWith(expect.stringMatching(/^competitor:/));
+    expect(mockClient.callTool).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(livePayload.structuredContent);
+  });
 });
 
 describe('aiService OpenAI Responses adapter', () => {
+  let mockLogger;
+
   const loadService = () => {
     jest.resetModules();
+
+    mockLogger = {
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+      emitQualityEvent: jest.fn()
+    };
 
     jest.doMock('../src/config/redis', () => ({
       get: jest.fn().mockResolvedValue(null),
@@ -85,11 +187,7 @@ describe('aiService OpenAI Responses adapter', () => {
       del: jest.fn().mockResolvedValue(1)
     }));
 
-    jest.doMock('../src/config/logger', () => ({
-      info: jest.fn(),
-      warn: jest.fn(),
-      error: jest.fn()
-    }));
+    jest.doMock('../src/config/logger', () => mockLogger);
 
     jest.doMock('@modelcontextprotocol/sdk/client/index.js', () => ({
       Client: jest.fn()
@@ -122,8 +220,14 @@ describe('aiService OpenAI Responses adapter', () => {
     delete process.env.AI_MODEL;
     delete process.env.AI_FALLBACK_MODEL;
     delete process.env.AI_PROTOCOL;
+    delete process.env.AI_RESPONSES_INCLUDE_TEMPERATURE;
+    delete process.env.AI_PROTOCOL;
     delete process.env.AI_RETRY_MAX_ATTEMPTS;
     delete process.env.AI_RETRY_BASE_DELAY_MS;
+    delete process.env.AI_QUALITY_CONTRACT_ENABLED;
+    delete process.env.AI_QUALITY_STRICT_MODE;
+    delete process.env.AI_QUALITY_MIN_COVERAGE_SOURCES;
+    delete process.env.AI_QUALITY_POLICY_VERSION;
   });
 
   afterEach(() => {
@@ -299,9 +403,9 @@ describe('aiService OpenAI Responses adapter', () => {
     const requestBody = JSON.parse(global.fetch.mock.calls[0][1].body);
     expect(requestBody).toEqual(expect.objectContaining({
       model: 'gpt-4.1-mini',
-      temperature: 0.2,
       max_output_tokens: 300
     }));
+    expect(requestBody).not.toHaveProperty('temperature');
     expect(requestBody.input).toEqual(expect.arrayContaining([
       expect.objectContaining({ role: 'system' }),
       expect.objectContaining({ role: 'user' })
@@ -321,6 +425,155 @@ describe('aiService OpenAI Responses adapter', () => {
         strict: true
       }
     });
+  });
+
+  test('forces stream mode for non-official responses hosts and accepts JSON fallback bodies', async () => {
+    const aiService = loadService();
+
+    process.env.AI_BASE_URL = 'https://gmn.chuangzuoli.com/v1';
+    process.env.AI_API_KEY = 'test-key';
+
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: { get: jest.fn().mockReturnValue('application/json') },
+      text: jest.fn().mockResolvedValue(JSON.stringify({
+        status: 'completed',
+        output: [{
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'forced stream ok' }]
+        }]
+      }))
+    });
+
+    const result = await aiService.callResponsesCompletion({
+      model: 'gpt-5.2',
+      temperature: 0.2,
+      maxTokens: 256,
+      messages: [{ role: 'user', content: 'hello' }]
+    });
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const requestHeaders = global.fetch.mock.calls[0][1].headers;
+    const requestBody = JSON.parse(global.fetch.mock.calls[0][1].body);
+    expect(requestHeaders.Accept).toBe('text/event-stream');
+    expect(requestBody.stream).toBe(true);
+    expect(result).toEqual(expect.objectContaining({
+      content: 'forced stream ok',
+      finishReason: 'stop'
+    }));
+  });
+
+  test('uses max_tokens key for non-openai responses providers', async () => {
+    const aiService = loadService();
+
+    process.env.AI_BASE_URL = 'https://openrouter.ai/api/v1';
+    process.env.AI_API_KEY = 'test-key';
+
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: { get: jest.fn().mockReturnValue('application/json') },
+      text: jest.fn().mockResolvedValue(JSON.stringify({
+        status: 'completed',
+        output: [{
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'ok' }]
+        }]
+      }))
+    });
+
+    await aiService.callResponsesCompletion({
+      model: 'gpt-4.1-mini',
+      temperature: 0.2,
+      maxTokens: 300,
+      messages: [{ role: 'user', content: 'hello' }]
+    });
+
+    const requestBody = JSON.parse(global.fetch.mock.calls[0][1].body);
+    expect(requestBody.max_tokens).toBe(300);
+    expect(requestBody.max_output_tokens).toBeUndefined();
+  });
+
+  test('retries once with token-key override when responses provider rejects max_output_tokens', async () => {
+    const aiService = loadService();
+
+    process.env.AI_BASE_URL = 'https://gmn.chuangzuoli.com/v1';
+    process.env.AI_API_KEY = 'test-key';
+
+    global.fetch = jest.fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        headers: { get: jest.fn().mockReturnValue(null) },
+        text: jest.fn().mockResolvedValue(JSON.stringify({
+          error: { message: 'Unsupported parameter: max_output_tokens' }
+        }))
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: { get: jest.fn().mockReturnValue('application/json') },
+        text: jest.fn().mockResolvedValue(JSON.stringify({
+          status: 'completed',
+          output: [{
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'retry succeeded' }]
+          }]
+        }))
+      });
+
+    const result = await aiService.callResponsesCompletion({
+      model: 'gpt-5.2',
+      temperature: 0.2,
+      maxTokens: 180,
+      messages: [{ role: 'user', content: 'hello' }]
+    });
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    const firstBody = JSON.parse(global.fetch.mock.calls[0][1].body);
+    const secondBody = JSON.parse(global.fetch.mock.calls[1][1].body);
+    expect(firstBody.max_output_tokens).toBe(180);
+    expect(secondBody.max_tokens).toBe(180);
+    expect(secondBody.max_output_tokens).toBeUndefined();
+    expect(result).toEqual(expect.objectContaining({
+      content: 'retry succeeded'
+    }));
+  });
+
+  test('includes responses temperature only when explicitly enabled', async () => {
+    const aiService = loadService();
+
+    process.env.AI_BASE_URL = 'https://api.openai.com/v1';
+    process.env.AI_API_KEY = 'test-key';
+    process.env.AI_RESPONSES_INCLUDE_TEMPERATURE = 'true';
+
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: { get: jest.fn().mockReturnValue(null) },
+      text: jest.fn().mockResolvedValue(JSON.stringify({
+        status: 'completed',
+        output: [{
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'ok' }]
+        }]
+      }))
+    });
+
+    await aiService.callResponsesCompletion({
+      model: 'gpt-4.1-mini',
+      temperature: 0.2,
+      maxTokens: 120,
+      messages: [{ role: 'user', content: 'hello' }]
+    });
+
+    const requestBody = JSON.parse(global.fetch.mock.calls[0][1].body);
+    expect(requestBody.temperature).toBe(0.2);
   });
 
   test('runs MCP tool-call loop and resumes responses completion', async () => {
@@ -376,7 +629,10 @@ describe('aiService OpenAI Responses adapter', () => {
         { role: 'system', content: '你是分析助手' },
         { role: 'user', content: '请调用工具后给出结论' }
       ],
-      enableMcpToolLoop: true
+      enableMcpToolLoop: true,
+      telemetryContext: {
+        analysisRequestId: 'req-tool-1'
+      }
     });
 
     expect(global.fetch).toHaveBeenCalledTimes(2);
@@ -396,6 +652,94 @@ describe('aiService OpenAI Responses adapter', () => {
 
     expect(result).toEqual(expect.objectContaining({
       content: 'tool-informed narrative',
+      finishReason: 'stop'
+    }));
+
+    const telemetryCall = mockLogger.emitQualityEvent.mock.calls.find((call) => call[0] === 'quality.ai.tool_call.executed');
+    expect(telemetryCall).toBeTruthy();
+    expect(telemetryCall[1]).toEqual(expect.objectContaining({
+      analysisRequestId: 'req-tool-1',
+      stage: 'service_tool_call',
+      status: 'ok'
+    }));
+  });
+
+  test('runs MCP tool-call loop for fetch_news_stream and normalizes limit', async () => {
+    const aiService = loadService();
+
+    process.env.AI_BASE_URL = 'https://api.openai.com/v1';
+    process.env.AI_API_KEY = 'test-key';
+
+    const mockClient = {
+      callTool: jest.fn().mockResolvedValue({
+        structuredContent: {
+          query: 'acme',
+          timeframe: '7d',
+          news: [{ title: 'Acme update' }],
+          meta: { limit: 5 }
+        }
+      })
+    };
+    jest.spyOn(aiService, 'connectMCP').mockResolvedValue(mockClient);
+
+    global.fetch = jest.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: { get: jest.fn().mockReturnValue(null) },
+        text: jest.fn().mockResolvedValue(JSON.stringify({
+          id: 'resp_news_1',
+          status: 'completed',
+          output: [{
+            type: 'function_call',
+            name: 'fetch_news_stream',
+            call_id: 'call_news_1',
+            arguments: '{"query":"acme","timeframe":"7d","limit":"5"}'
+          }]
+        }))
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: { get: jest.fn().mockReturnValue(null) },
+        text: jest.fn().mockResolvedValue(JSON.stringify({
+          status: 'completed',
+          output: [{
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'news tool narrative' }]
+          }]
+        }))
+      });
+
+    const result = await aiService.callResponsesCompletion({
+      model: 'gpt-4.1-mini',
+      temperature: 0.2,
+      maxTokens: 300,
+      messages: [
+        { role: 'system', content: 'you are an analyst assistant' },
+        { role: 'user', content: 'use news tool then respond' }
+      ],
+      enableMcpToolLoop: true
+    });
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(mockClient.callTool).toHaveBeenCalledWith({
+      name: 'fetch_news_stream',
+      arguments: { query: 'acme', timeframe: '7d', limit: 5 }
+    });
+
+    const secondRequestBody = JSON.parse(global.fetch.mock.calls[1][1].body);
+    expect(secondRequestBody.previous_response_id).toBe('resp_news_1');
+    expect(secondRequestBody.input).toEqual([
+      expect.objectContaining({
+        type: 'function_call_output',
+        call_id: 'call_news_1'
+      })
+    ]);
+
+    expect(result).toEqual(expect.objectContaining({
+      content: 'news tool narrative',
       finishReason: 'stop'
     }));
   });
@@ -484,8 +828,35 @@ describe('aiService OpenAI Responses adapter', () => {
 });
 
 describe('aiService.generateAnalysisNarrative', () => {
+  let mockLogger;
+
+  const buildNarrativePayload = () => ({
+    target: '新能源',
+    uploaded: { matchedCount: 0, usedCount: 0, topIndustries: [] },
+    industryNames: ['新能源'],
+    competitorNames: ['星能科技'],
+    model: { method: 'Entropy Weight + TOPSIS + Theil-Sen', trendLabel: 'stable', trendSlope: 0, weights: [], ranking: [] },
+    peers: [{ name: '星能科技', industry: '新能源' }],
+    peerResearch: [],
+    keyFindings: ['新能源赛道竞争加剧'],
+    suggestions: [],
+    marketReport: {
+      references: [{ name: '新能源行业年度报告', url: 'https://example.com/report-2025', summary: '行业规模增长' }]
+    },
+    financialData: {
+      references: [{ name: '企业年报', url: 'https://example.com/annual' }]
+    }
+  });
+
   const loadService = () => {
     jest.resetModules();
+
+    mockLogger = {
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+      emitQualityEvent: jest.fn()
+    };
 
     jest.doMock('../src/config/redis', () => ({
       get: jest.fn().mockResolvedValue(null),
@@ -493,11 +864,7 @@ describe('aiService.generateAnalysisNarrative', () => {
       del: jest.fn().mockResolvedValue(1)
     }));
 
-    jest.doMock('../src/config/logger', () => ({
-      info: jest.fn(),
-      warn: jest.fn(),
-      error: jest.fn()
-    }));
+    jest.doMock('../src/config/logger', () => mockLogger);
 
     jest.doMock('@modelcontextprotocol/sdk/client/index.js', () => ({
       Client: jest.fn()
@@ -513,6 +880,7 @@ describe('aiService.generateAnalysisNarrative', () => {
   const originalFetch = global.fetch;
 
   beforeEach(() => {
+    delete process.env.AI_USE_MOCK;
     delete process.env.AI_BASE_URL;
     delete process.env.AI_API_KEY;
     delete process.env.AI_MODEL;
@@ -521,8 +889,13 @@ describe('aiService.generateAnalysisNarrative', () => {
     delete process.env.AI_SECONDARY_BASE_URL;
     delete process.env.AI_SECONDARY_API_KEY;
     delete process.env.AI_SECONDARY_MODEL;
+    delete process.env.AI_RESPONSES_INCLUDE_TEMPERATURE;
     delete process.env.AI_RETRY_MAX_ATTEMPTS;
     delete process.env.AI_RETRY_BASE_DELAY_MS;
+    delete process.env.AI_REQUEST_TIMEOUT_MS;
+    delete process.env.AI_QUALITY_CONTRACT_ENABLED;
+    delete process.env.AI_QUALITY_STRICT_MODE;
+    delete process.env.AI_QUALITY_MIN_COVERAGE_SOURCES;
   });
 
   afterEach(() => {
@@ -536,17 +909,76 @@ describe('aiService.generateAnalysisNarrative', () => {
     process.env.AI_API_KEY = 'test-key';
     process.env.AI_MODEL = 'primary-model';
     process.env.AI_FALLBACK_MODEL = 'primary-model';
-    process.env.AI_RETRY_MAX_ATTEMPTS = '1';
+    process.env.AI_RETRY_MAX_ATTEMPTS = '2';
     process.env.AI_RETRY_BASE_DELAY_MS = '1';
 
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: false,
-      status: 429,
-      headers: { get: jest.fn().mockReturnValue('1') },
-      text: jest.fn().mockResolvedValue(JSON.stringify({
-        error: { message: 'rate_limited' }
-      }))
+    global.fetch = jest.fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        headers: { get: jest.fn().mockReturnValue('1') },
+        text: jest.fn().mockResolvedValue(JSON.stringify({
+          error: { message: 'rate_limited' }
+        }))
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        headers: { get: jest.fn().mockReturnValue('1') },
+        text: jest.fn().mockResolvedValue(JSON.stringify({
+          error: { message: 'rate_limited' }
+        }))
+      });
+
+    const result = await aiService.generateAnalysisNarrative({
+      target: '新能源',
+      uploaded: { matchedCount: 0, usedCount: 0, topIndustries: [] },
+      industryNames: [],
+      competitorNames: [],
+      model: { method: 'Entropy Weight + TOPSIS + Theil-Sen', trendLabel: 'stable', trendSlope: 0, weights: [], ranking: [] },
+      peers: [],
+      peerResearch: [],
+      keyFindings: [],
+      suggestions: []
+    }, {
+      telemetryContext: {
+        analysisRequestId: 'req-retry-1'
+      }
     });
+
+    expect(global.fetch).toHaveBeenCalled();
+    expect(result).toEqual(expect.objectContaining({
+      modelUsed: 'fallback-template',
+      providerUsed: 'fallback',
+      degraded: true,
+      degradedReason: 'provider_rate_limited'
+    }));
+    expect(typeof result.text).toBe('string');
+    expect(result.text.length).toBeGreaterThan(0);
+
+    const retryCall = mockLogger.emitQualityEvent.mock.calls.find((call) => call[0] === 'quality.ai.provider_retry');
+    const terminalCall = mockLogger.emitQualityEvent.mock.calls.filter((call) => call[0] === 'quality.ai.provider_terminal').pop();
+    expect(retryCall).toBeTruthy();
+    expect(retryCall[1]).toEqual(expect.objectContaining({
+      analysisRequestId: 'req-retry-1',
+      stage: 'service_provider_retry'
+    }));
+    expect(terminalCall).toBeTruthy();
+    expect(terminalCall[1]).toEqual(expect.objectContaining({
+      analysisRequestId: 'req-retry-1',
+      status: 'degraded'
+    }));
+    expect(JSON.stringify(terminalCall[1])).not.toMatch(/test-key|authorization|cookie|prompt|messages/i);
+  });
+
+  test('maps quality feature flags into narrative metadata', async () => {
+    const aiService = loadService();
+
+    process.env.AI_USE_MOCK = 'true';
+    process.env.AI_QUALITY_CONTRACT_ENABLED = '0';
+    process.env.AI_QUALITY_STRICT_MODE = 'yes';
+    process.env.AI_QUALITY_MIN_COVERAGE_SOURCES = '5';
+    process.env.AI_QUALITY_POLICY_VERSION = 'quality-policy-v2';
 
     const result = await aiService.generateAnalysisNarrative({
       target: '新能源',
@@ -560,13 +992,439 @@ describe('aiService.generateAnalysisNarrative', () => {
       suggestions: []
     });
 
-    expect(global.fetch).toHaveBeenCalled();
     expect(result).toEqual(expect.objectContaining({
+      qualityFlags: {
+        qualityContractEnabled: false,
+        qualityStrictMode: true,
+        qualityMinCoverageSources: 5,
+        version: 'quality-policy-v2'
+      }
+    }));
+  });
+
+  test('repairs unsupported-claim output and degrades with explicit reason when still unsupported', async () => {
+    const aiService = loadService();
+
+    process.env.AI_BASE_URL = 'https://openrouter.ai/api/v1';
+    process.env.AI_API_KEY = 'test-key';
+    process.env.AI_MODEL = 'primary-model';
+    process.env.AI_FALLBACK_MODEL = 'primary-model';
+    process.env.AI_PROTOCOL = 'chat_completions';
+    process.env.AI_RETRY_MAX_ATTEMPTS = '1';
+    process.env.AI_RETRY_BASE_DELAY_MS = '1';
+    process.env.AI_QUALITY_STRICT_MODE = 'true';
+
+    global.fetch = jest.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: { get: jest.fn().mockReturnValue(null) },
+        text: jest.fn().mockResolvedValue(JSON.stringify({
+          choices: [{ message: { content: '2025年该行业规模达到1000亿元，头部企业利润率为70%。' }, finish_reason: 'stop' }],
+          model: 'primary-model'
+        }))
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: { get: jest.fn().mockReturnValue(null) },
+        text: jest.fn().mockResolvedValue(JSON.stringify({
+          choices: [{ message: { content: '预计未来三年行业规模翻倍，利润率维持70%。' }, finish_reason: 'stop' }],
+          model: 'primary-model'
+        }))
+      });
+
+    const unsupportedPayload = buildNarrativePayload();
+    unsupportedPayload.target = '茶饮品牌';
+    unsupportedPayload.industryNames = [];
+    unsupportedPayload.competitorNames = [];
+    unsupportedPayload.keyFindings = [];
+    unsupportedPayload.marketReport = { references: [] };
+    unsupportedPayload.financialData = { references: [] };
+
+    const result = await aiService.generateAnalysisNarrative(unsupportedPayload, {
+      telemetryContext: {
+        analysisRequestId: 'req-unsupported-1'
+      }
+    });
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(result).toEqual(expect.objectContaining({
+      degraded: true,
+      degradedReason: 'unsupported_claim_detected',
       modelUsed: 'fallback-template',
       providerUsed: 'fallback',
-      degraded: true
+      claimSupport: expect.objectContaining({
+        repairAttempted: true,
+        repairSucceeded: false,
+        reasonCode: 'unsupported_claim_detected'
+      })
     }));
-    expect(typeof result.text).toBe('string');
-    expect(result.text.length).toBeGreaterThan(0);
+    expect(result.claimSupport.unsupportedClaims).toBeGreaterThan(0);
+  });
+
+  test('keeps provider output in non-strict mode when claim support is degraded', async () => {
+    const aiService = loadService();
+
+    process.env.AI_BASE_URL = 'https://openrouter.ai/api/v1';
+    process.env.AI_API_KEY = 'test-key';
+    process.env.AI_MODEL = 'primary-model';
+    process.env.AI_FALLBACK_MODEL = 'primary-model';
+    process.env.AI_PROTOCOL = 'chat_completions';
+    process.env.AI_RETRY_MAX_ATTEMPTS = '1';
+    process.env.AI_RETRY_BASE_DELAY_MS = '1';
+    process.env.AI_QUALITY_STRICT_MODE = 'false';
+
+    global.fetch = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: { get: jest.fn().mockReturnValue(null) },
+      text: jest.fn().mockResolvedValue(JSON.stringify({
+        choices: [{ message: { content: '2025年该行业规模达到1000亿元，头部企业利润率为20%。' }, finish_reason: 'stop' }],
+        model: 'primary-model'
+      }))
+    });
+
+    const unsupportedPayload = buildNarrativePayload();
+    unsupportedPayload.target = '茶饮品牌';
+    unsupportedPayload.industryNames = [];
+    unsupportedPayload.competitorNames = [];
+    unsupportedPayload.keyFindings = [];
+    unsupportedPayload.marketReport = { references: [] };
+    unsupportedPayload.financialData = { references: [] };
+
+    const result = await aiService.generateAnalysisNarrative(unsupportedPayload, {
+      telemetryContext: {
+        analysisRequestId: 'req-unsupported-nonstrict-1'
+      }
+    });
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(expect.objectContaining({
+      degraded: false,
+      degradedReason: null,
+      modelUsed: 'primary-model',
+      providerUsed: 'primary',
+      claimSupport: expect.objectContaining({
+        repairAttempted: false,
+        repairSucceeded: false,
+        reasonCode: 'unsupported_claim_detected'
+      })
+    }));
+  });
+
+  test('ignores structural headings and hypothesis lines in claim-support counting', async () => {
+    const aiService = loadService();
+
+    process.env.AI_BASE_URL = 'https://openrouter.ai/api/v1';
+    process.env.AI_API_KEY = 'test-key';
+    process.env.AI_MODEL = 'primary-model';
+    process.env.AI_FALLBACK_MODEL = 'primary-model';
+    process.env.AI_PROTOCOL = 'chat_completions';
+    process.env.AI_RETRY_MAX_ATTEMPTS = '1';
+    process.env.AI_RETRY_BASE_DELAY_MS = '1';
+    process.env.AI_QUALITY_STRICT_MODE = 'false';
+
+    global.fetch = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: { get: jest.fn().mockReturnValue(null) },
+      text: jest.fn().mockResolvedValue(JSON.stringify({
+        choices: [{
+          message: {
+            content: [
+              '1) 高管摘要（3条以内，每条1句话）',
+              '【假设】未来三年行业规模翻倍。',
+              '行业报告显示新能源赛道增长。'
+            ].join('\n')
+          },
+          finish_reason: 'stop'
+        }],
+        model: 'primary-model'
+      }))
+    });
+
+    const result = await aiService.generateAnalysisNarrative(buildNarrativePayload(), {
+      telemetryContext: {
+        analysisRequestId: 'req-claim-filter-1'
+      }
+    });
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(expect.objectContaining({
+      degraded: false,
+      providerUsed: 'primary',
+      claimSupport: expect.objectContaining({
+        unsupportedClaims: 0,
+        supportRatio: 1,
+        inferenceClaimCount: 0
+      })
+    }));
+  });
+
+  test('ignores scoring/template instruction lines in claim-support counting', async () => {
+    const aiService = loadService();
+
+    process.env.AI_BASE_URL = 'https://openrouter.ai/api/v1';
+    process.env.AI_API_KEY = 'test-key';
+    process.env.AI_MODEL = 'primary-model';
+    process.env.AI_FALLBACK_MODEL = 'primary-model';
+    process.env.AI_PROTOCOL = 'chat_completions';
+    process.env.AI_RETRY_MAX_ATTEMPTS = '1';
+    process.env.AI_RETRY_BASE_DELAY_MS = '1';
+    process.env.AI_QUALITY_STRICT_MODE = 'false';
+
+    global.fetch = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: { get: jest.fn().mockReturnValue(null) },
+      text: jest.fn().mockResolvedValue(JSON.stringify({
+        choices: [{
+          message: {
+            content: [
+              '同行对标可执行策略（至少3条，含适用场景）',
+              '- 策略1：城市分层的开店模型',
+              '评分规则（可复现）：1-5分，5分代表更优。',
+              '- 影响 4｜可行性 4｜成本 3｜风险 3（【事实+推断】已有零售店型信号，延展相对可行）',
+              'P0（没有就无法做量化模型与ROI决策）',
+              '- 渠道数据：外卖/到店/自提/零售GMV占比、转化漏斗（影响：无法判断增长来自哪里）',
+              '行业报告显示新能源赛道增长。'
+            ].join('\n')
+          },
+          finish_reason: 'stop'
+        }],
+        model: 'primary-model'
+      }))
+    });
+
+    const result = await aiService.generateAnalysisNarrative(buildNarrativePayload(), {
+      telemetryContext: {
+        analysisRequestId: 'req-claim-template-filter-1'
+      }
+    });
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(expect.objectContaining({
+      degraded: false,
+      providerUsed: 'primary',
+      claimSupport: expect.objectContaining({
+        unsupportedClaims: 0,
+        supportRatio: 1,
+        inferenceClaimCount: 0
+      })
+    }));
+  });
+
+  test('ignores option-style strategy headings in claim-support counting', async () => {
+    const aiService = loadService();
+
+    process.env.AI_BASE_URL = 'https://openrouter.ai/api/v1';
+    process.env.AI_API_KEY = 'test-key';
+    process.env.AI_MODEL = 'primary-model';
+    process.env.AI_FALLBACK_MODEL = 'primary-model';
+    process.env.AI_PROTOCOL = 'chat_completions';
+    process.env.AI_RETRY_MAX_ATTEMPTS = '1';
+    process.env.AI_RETRY_BASE_DELAY_MS = '1';
+    process.env.AI_QUALITY_STRICT_MODE = 'false';
+
+    global.fetch = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: { get: jest.fn().mockReturnValue(null) },
+      text: jest.fn().mockResolvedValue(JSON.stringify({
+        choices: [{
+          message: {
+            content: [
+              '- 选项A：门店规模优先',
+              '- Option B: Retail-first expansion',
+              '行业报告显示新能源赛道增长。'
+            ].join('\n')
+          },
+          finish_reason: 'stop'
+        }],
+        model: 'primary-model'
+      }))
+    });
+
+    const result = await aiService.generateAnalysisNarrative(buildNarrativePayload(), {
+      telemetryContext: {
+        analysisRequestId: 'req-claim-option-filter-1'
+      }
+    });
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(expect.objectContaining({
+      degraded: false,
+      providerUsed: 'primary',
+      claimSupport: expect.objectContaining({
+        unsupportedClaims: 0,
+        supportRatio: 1
+      })
+    }));
+  });
+
+  test('ignores action-plan template lines in claim-support counting', async () => {
+    const aiService = loadService();
+
+    process.env.AI_BASE_URL = 'https://openrouter.ai/api/v1';
+    process.env.AI_API_KEY = 'test-key';
+    process.env.AI_MODEL = 'primary-model';
+    process.env.AI_FALLBACK_MODEL = 'primary-model';
+    process.env.AI_PROTOCOL = 'chat_completions';
+    process.env.AI_RETRY_MAX_ATTEMPTS = '1';
+    process.env.AI_RETRY_BASE_DELAY_MS = '1';
+    process.env.AI_QUALITY_STRICT_MODE = 'false';
+
+    global.fetch = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: { get: jest.fn().mockReturnValue(null) },
+      text: jest.fn().mockResolvedValue(JSON.stringify({
+        choices: [{
+          message: {
+            content: [
+              '负责人：零售事业部',
+              '- 动作：在2-3个候选城市做验证',
+              'KPI：首月动销率达标',
+              '- 建议动作：见第6部分路线图（数据底座、零售曲线、IP护城河、区域扩张打法）',
+              '- 优势：【事实】信号源明确指向“千店规模+去地域标签”议题（`peers[1].name`）',
+              '行业报告显示新能源赛道增长。'
+            ].join('\n')
+          },
+          finish_reason: 'stop'
+        }],
+        model: 'primary-model'
+      }))
+    });
+
+    const result = await aiService.generateAnalysisNarrative(buildNarrativePayload(), {
+      telemetryContext: {
+        analysisRequestId: 'req-claim-action-template-filter-1'
+      }
+    });
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(expect.objectContaining({
+      degraded: false,
+      providerUsed: 'primary',
+      claimSupport: expect.objectContaining({
+        unsupportedClaims: 0,
+        supportRatio: 1
+      })
+    }));
+  });
+
+  test('tracks inference-tagged lines as warning-only and excludes them from unsupported claims', async () => {
+    const aiService = loadService();
+
+    process.env.AI_BASE_URL = 'https://openrouter.ai/api/v1';
+    process.env.AI_API_KEY = 'test-key';
+    process.env.AI_MODEL = 'primary-model';
+    process.env.AI_FALLBACK_MODEL = 'primary-model';
+    process.env.AI_PROTOCOL = 'chat_completions';
+    process.env.AI_RETRY_MAX_ATTEMPTS = '1';
+    process.env.AI_RETRY_BASE_DELAY_MS = '1';
+    process.env.AI_QUALITY_STRICT_MODE = 'false';
+
+    global.fetch = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: { get: jest.fn().mockReturnValue(null) },
+      text: jest.fn().mockResolvedValue(JSON.stringify({
+        choices: [{
+          message: {
+            content: [
+              '【推断】增长抓手应优先做渠道联动。',
+              '行业报告显示新能源赛道增长。'
+            ].join('\n')
+          },
+          finish_reason: 'stop'
+        }],
+        model: 'primary-model'
+      }))
+    });
+
+    const result = await aiService.generateAnalysisNarrative(buildNarrativePayload(), {
+      telemetryContext: {
+        analysisRequestId: 'req-claim-inference-filter-1'
+      }
+    });
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(expect.objectContaining({
+      degraded: false,
+      providerUsed: 'primary',
+      claimSupport: expect.objectContaining({
+        inferenceClaimCount: 1,
+        unsupportedClaims: 0,
+        supportRatio: 1
+      })
+    }));
+    expect(result.claimSupport.inferenceSamples[0]).toContain('推断');
+  });
+
+  test('keeps supported-claim output healthy and emits claim-support metrics', async () => {
+    const aiService = loadService();
+
+    process.env.AI_BASE_URL = 'https://openrouter.ai/api/v1';
+    process.env.AI_API_KEY = 'test-key';
+    process.env.AI_MODEL = 'primary-model';
+    process.env.AI_FALLBACK_MODEL = 'primary-model';
+    process.env.AI_PROTOCOL = 'chat_completions';
+    process.env.AI_RETRY_MAX_ATTEMPTS = '1';
+    process.env.AI_RETRY_BASE_DELAY_MS = '1';
+
+    global.fetch = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: { get: jest.fn().mockReturnValue(null) },
+      text: jest.fn().mockResolvedValue(JSON.stringify({
+        choices: [{ message: { content: '新能源行业年度报告显示市场规模增长，星能科技在新能源赛道竞争加剧背景下保持稳定。' }, finish_reason: 'stop' }],
+        model: 'primary-model'
+      }))
+    });
+
+    const result = await aiService.generateAnalysisNarrative(buildNarrativePayload(), {
+      telemetryContext: {
+        analysisRequestId: 'req-supported-1'
+      }
+    });
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(expect.objectContaining({
+      degraded: false,
+      claimSupport: expect.objectContaining({
+        repairAttempted: false,
+        unsupportedClaims: 0
+      })
+    }));
+    expect(result.claimSupport.supportedClaims).toBeGreaterThan(0);
+  });
+
+  test('keeps timeout mapping deterministic when provider times out', async () => {
+    const aiService = loadService();
+
+    process.env.AI_BASE_URL = 'https://openrouter.ai/api/v1';
+    process.env.AI_API_KEY = 'test-key';
+    process.env.AI_MODEL = 'primary-model';
+    process.env.AI_FALLBACK_MODEL = 'primary-model';
+    process.env.AI_PROTOCOL = 'chat_completions';
+    process.env.AI_RETRY_MAX_ATTEMPTS = '1';
+    process.env.AI_RETRY_BASE_DELAY_MS = '1';
+    process.env.AI_REQUEST_TIMEOUT_MS = '5';
+
+    const timeoutErr = new Error('request timeout');
+    timeoutErr.status = 504;
+    timeoutErr.limitHint = 'provider_timeout';
+    global.fetch = jest.fn().mockRejectedValue(timeoutErr);
+
+    await expect(aiService.generateAnalysisNarrative(buildNarrativePayload(), {
+      telemetryContext: {
+        analysisRequestId: 'req-timeout-1'
+      }
+    })).rejects.toMatchObject({
+      status: 504,
+      limitHint: 'provider_timeout'
+    });
   });
 });
