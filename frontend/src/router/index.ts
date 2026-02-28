@@ -39,9 +39,9 @@ const router = createRouter({
     { path: '/upload', component: () => import('../views/Upload.vue'), meta: { requiresAuth: true, titleKey: 'nav.upload' } },
     { path: '/analysis', component: () => import('../views/Analysis.vue'), meta: { requiresAuth: true, titleKey: 'nav.analysis' } },
     { path: '/recommendations', component: () => import('../views/Recommendations.vue'), meta: { requiresAuth: true, titleKey: 'nav.recommendations' } },
-    { path: '/ai-analyze', component: () => import('../views/AIAnalyze.vue'), meta: { requiresAuth: true, titleKey: 'nav.aiAnalyze' } },
+    { path: '/ai-analyze', component: () => import('../views/IntelligenceHub.vue'), meta: { requiresAuth: true, titleKey: 'nav.aiAnalyze' } },
     { path: '/ai-settings', component: () => import('../views/AISettings.vue'), meta: { requiresAuth: true, titleKey: 'nav.aiSettings' } },
-    { path: '/deep-research', component: () => import('../views/DeepResearch.vue'), meta: { requiresAuth: true, titleKey: 'nav.deepResearch' } }
+    { path: '/deep-research', redirect: '/ai-analyze?tab=research', meta: { requiresAuth: true, titleKey: 'nav.aiAnalyze' } }
   ]
 })
 

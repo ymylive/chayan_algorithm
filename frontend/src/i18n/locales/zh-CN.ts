@@ -6,7 +6,7 @@
     upload: '数据上传',
     analysis: '分析',
     recommendations: '建议',
-    aiAnalyze: 'AI 分析',
+    aiAnalyze: '智能研究分析',
     aiSettings: 'AI 设置',
     deepResearch: '深度研究',
     collapse: '收起'
@@ -319,6 +319,14 @@
     }
   },
   aiAnalyze: {
+    unified: {
+      title: '智能研究分析工作台',
+      subtitle: '在同一入口完成快速 AI 分析与深度研究，任务与历史结果统一管理。',
+      tabs: {
+        analyze: 'AI 分析',
+        research: '深度研究'
+      }
+    },
     header: {
       title: 'AI 智能分析',
       subtitle: '分步骤分析公司数据，支持离开页面后后台持续运行。'

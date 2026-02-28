@@ -6,7 +6,7 @@ export default {
     upload: 'Upload',
     analysis: 'Analysis',
     recommendations: 'Recommendations',
-    aiAnalyze: 'AI Analyze',
+    aiAnalyze: 'AI Research & Analysis',
     aiSettings: 'AI Settings',
     deepResearch: 'Deep Research',
     collapse: 'Collapse'
@@ -319,6 +319,14 @@ export default {
     }
   },
   aiAnalyze: {
+    unified: {
+      title: 'Research & Analysis Workspace',
+      subtitle: 'Run AI analysis and deep research in one workspace with shared task and history flow.',
+      tabs: {
+        analyze: 'AI Analyze',
+        research: 'Deep Research'
+      }
+    },
     header: {
       title: 'AI Intelligent Analysis',
       subtitle: 'Analyze company data step by step, with persistent background execution.'

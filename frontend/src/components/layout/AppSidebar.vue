@@ -98,8 +98,7 @@ const menuItems: SidebarMenuItem[] = [
   { path: '/analysis', labelKey: 'nav.analysis' },
   { path: '/recommendations', labelKey: 'nav.recommendations' },
   { path: '/ai-analyze', labelKey: 'nav.aiAnalyze' },
-  { path: '/ai-settings', labelKey: 'nav.aiSettings' },
-  { path: '/deep-research', labelKey: 'nav.deepResearch' }
+  { path: '/ai-settings', labelKey: 'nav.aiSettings' }
 ]
 
 const sidebarStyle = computed(() => {
