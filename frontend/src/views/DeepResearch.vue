@@ -5,18 +5,18 @@
         <div class="header-row">
           <span class="title-icon"><el-icon><Search /></el-icon></span>
           <div>
-            <div class="title-main">深度研究</div>
-            <div class="title-sub">实时搜索、抓取、分析市场数据与竞争对手</div>
+            <div class="title-main">{{ t('deepResearch.header.title') }}</div>
+            <div class="title-sub">{{ t('deepResearch.header.subtitle') }}</div>
           </div>
         </div>
       </template>
 
       <el-form :model="form" label-width="100px">
-        <el-form-item label="研究主题">
-          <el-input v-model="form.topic" placeholder="例如：新能源汽车市场" clearable @keyup.enter="startResearch" />
+        <el-form-item :label="t('deepResearch.form.topicLabel')">
+          <el-input v-model="form.topic" :placeholder="t('deepResearch.form.topicPlaceholder')" clearable @keyup.enter="startResearch" />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" :loading="loading" @click="startResearch">启动研究</el-button>
+          <el-button type="primary" :loading="loading" class="start-button" @click="startResearch">{{ t('deepResearch.form.startButton') }}</el-button>
         </el-form-item>
       </el-form>
 
@@ -32,28 +32,30 @@
       <el-card v-if="result" class="result-card">
         <template #header>
           <span class="result-icon"><el-icon><Document /></el-icon></span>
-          <span>研究结果</span>
+          <span>{{ t('deepResearch.result.title') }}</span>
         </template>
 
         <div class="section" v-if="result.marketData">
-          <h4>市场数据</h4>
+          <h4>{{ t('deepResearch.section.marketData') }}</h4>
           <pre>{{ JSON.stringify(result.marketData, null, 2) }}</pre>
         </div>
 
         <div class="section" v-if="result.competitors?.length">
-          <h4>竞争对手</h4>
-          <el-table :data="result.competitors" border stripe size="small">
-            <el-table-column prop="name" label="名称" />
-            <el-table-column prop="relevance" label="相关度" width="100" />
-            <el-table-column prop="source" label="来源" width="120" />
-          </el-table>
+          <h4>{{ t('deepResearch.section.competitors') }}</h4>
+          <div class="table-scroll-x">
+            <el-table :data="result.competitors" border stripe size="small" class="data-table">
+              <el-table-column prop="name" :label="t('deepResearch.table.name')" />
+              <el-table-column prop="relevance" :label="t('deepResearch.table.relevance')" width="120" />
+              <el-table-column prop="source" :label="t('deepResearch.table.source')" width="140" />
+            </el-table>
+          </div>
         </div>
 
         <div class="section" v-if="result.sources?.length">
-          <h4>来源列表</h4>
+          <h4>{{ t('deepResearch.section.sources') }}</h4>
           <ul class="source-list">
             <li v-for="(src, idx) in result.sources" :key="idx">
-              <a :href="src.url" target="_blank">{{ src.title || src.url }}</a>
+              <a :href="src.url" target="_blank" rel="noopener noreferrer">{{ src.title || src.url }}</a>
             </li>
           </ul>
         </div>
@@ -61,21 +63,25 @@
     </el-card>
 
     <el-card v-if="history.length" class="history-card">
-      <template #header>历史记录</template>
-      <el-table :data="history" border stripe size="small" @row-click="loadHistory">
-        <el-table-column prop="topic" label="主题" />
-        <el-table-column prop="createdAt" label="时间" width="180" />
-        <el-table-column prop="status" label="状态" width="100" />
-      </el-table>
+      <template #header>{{ t('deepResearch.history.title') }}</template>
+      <div class="table-scroll-x">
+        <el-table :data="history" border stripe size="small" class="data-table" @row-click="loadHistory">
+          <el-table-column prop="topic" :label="t('deepResearch.history.topic')" />
+          <el-table-column prop="createdAt" :label="t('deepResearch.history.time')" width="180" />
+          <el-table-column prop="status" :label="t('deepResearch.history.status')" width="120" />
+        </el-table>
+      </div>
     </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import request from '../utils/request'
 
+const { t } = useI18n()
 const form = reactive({ topic: '' })
 const loading = ref(false)
 const currentTask = ref<any>(null)
@@ -95,11 +101,11 @@ const progressPct = computed(() => {
 
 const statusText = computed(() => {
   const phase = currentTask.value?.phase
-  if (phase === 'searching') return '搜索中'
-  if (phase === 'fetching') return '抓取中'
-  if (phase === 'analyzing') return '分析中'
-  if (phase === 'completed') return '已完成'
-  return '待启动'
+  if (phase === 'searching') return t('deepResearch.status.searching')
+  if (phase === 'fetching') return t('deepResearch.status.fetching')
+  if (phase === 'analyzing') return t('deepResearch.status.analyzing')
+  if (phase === 'completed') return t('deepResearch.status.completed')
+  return t('deepResearch.status.pending')
 })
 
 const statusClass = computed(() => {
@@ -118,7 +124,7 @@ const progressStatus = computed(() => {
 const progressDetail = computed(() => {
   if (!currentTask.value) return ''
   const { phase, fetched = 0, total = 0 } = currentTask.value
-  if (phase === 'fetching') return `已抓取 ${fetched}/${total}`
+  if (phase === 'fetching') return t('deepResearch.progress.fetched', { fetched, total })
   return ''
 })
 
@@ -135,21 +141,21 @@ const connectWebSocket = () => {
       currentTask.value = { ...currentTask.value, phase: 'completed' }
       result.value = data.payload
       localStorage.removeItem('research_task_id')
-      loadHistory()
+      void loadHistory()
     } else if (data.type === 'error') {
       currentTask.value = { ...currentTask.value, phase: 'error' }
-      ElMessage.error(data.message || '研究失败')
+      ElMessage.error(data.message || t('deepResearch.message.researchFailed'))
     }
   }
 
   ws.value.onerror = () => {
-    ElMessage.warning('WebSocket 连接异常')
+    ElMessage.warning(t('deepResearch.message.wsError'))
   }
 }
 
 const startResearch = async () => {
   if (!form.topic.trim()) {
-    ElMessage.warning('请输入研究主题')
+    ElMessage.warning(t('deepResearch.message.topicRequired'))
     return
   }
 
@@ -163,10 +169,10 @@ const startResearch = async () => {
     if (payload?.success && taskId) {
       currentTask.value = { taskId, phase: 'searching' }
       localStorage.setItem('research_task_id', taskId)
-      ElMessage.success('研究已启动')
+      ElMessage.success(t('deepResearch.message.started'))
     }
   } catch (err: any) {
-    ElMessage.error(err.message || '启动失败')
+    ElMessage.error(err.message || t('deepResearch.message.startFailed'))
   } finally {
     loading.value = false
   }
@@ -187,7 +193,7 @@ const loadHistory = async (row?: any) => {
 
 onMounted(() => {
   connectWebSocket()
-  loadHistory()
+  void loadHistory()
   const savedTaskId = localStorage.getItem('research_task_id')
   if (savedTaskId) {
     currentTask.value = { taskId: savedTaskId, phase: 'searching' }
@@ -212,7 +218,8 @@ onUnmounted(() => {
   gap: 12px;
 }
 
-.title-icon, .result-icon {
+.title-icon,
+.result-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -233,6 +240,10 @@ onUnmounted(() => {
   margin-top: 4px;
   color: #909399;
   font-size: 13px;
+}
+
+.start-button {
+  min-height: 44px;
 }
 
 .progress-section {
@@ -283,7 +294,8 @@ onUnmounted(() => {
   color: #606266;
 }
 
-.result-card, .history-card {
+.result-card,
+.history-card {
   margin-top: 20px;
 }
 
@@ -300,6 +312,22 @@ onUnmounted(() => {
   margin: 0 0 12px;
 }
 
+.section pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+}
+
+.table-scroll-x {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.data-table {
+  min-width: 640px;
+}
+
 .source-list {
   margin: 0;
   padding-left: 20px;
@@ -313,6 +341,8 @@ onUnmounted(() => {
 .source-list a {
   color: #1890ff;
   text-decoration: none;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .source-list a:hover {
@@ -335,6 +365,9 @@ onUnmounted(() => {
   .progress-section {
     padding: 12px;
   }
+
+  .data-table {
+    min-width: 560px;
+  }
 }
 </style>
-

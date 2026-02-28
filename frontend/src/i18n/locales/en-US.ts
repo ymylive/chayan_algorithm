@@ -38,6 +38,224 @@ export default {
       graph: 'Graph'
     }
   },
+  auth: {
+    login: {
+      title: 'ChaYan Analytics',
+      form: {
+        usernamePlaceholder: 'Username',
+        passwordPlaceholder: 'Password'
+      },
+      action: {
+        submit: 'Sign In'
+      },
+      link: {
+        noAccount: 'No account yet?',
+        goRegister: 'Create one'
+      },
+      validation: {
+        usernameRequired: 'Please enter your username',
+        passwordRequired: 'Please enter your password'
+      },
+      toast: {
+        success: 'Login successful',
+        failed: 'Login failed',
+        networkError: 'Login failed, please check your network connection'
+      }
+    },
+    register: {
+      title: 'Create Account',
+      form: {
+        emailPlaceholder: 'Email',
+        passwordPlaceholder: 'Password (at least 6 characters)',
+        confirmPasswordPlaceholder: 'Confirm password'
+      },
+      action: {
+        submit: 'Register'
+      },
+      link: {
+        hasAccount: 'Already have an account?',
+        backToLogin: 'Back to login'
+      },
+      validation: {
+        emailRequired: 'Please enter your email',
+        emailInvalid: 'Please enter a valid email address',
+        passwordRequired: 'Please enter your password',
+        passwordMin: 'Password must be at least 6 characters',
+        confirmPasswordRequired: 'Please confirm your password',
+        passwordMismatch: 'The two passwords do not match'
+      },
+      toast: {
+        success: 'Registration successful',
+        failed: 'Registration failed',
+        networkError: 'Registration failed, please check your network connection'
+      }
+    }
+  },
+  home: {
+    banner: {
+      title: 'Welcome to ChaYan Analytics',
+      subtitle: 'AI-powered enterprise analytics and decision support platform'
+    },
+    enterprise: {
+      title: 'Enterprise List',
+      searchPlaceholder: 'Enter enterprise name',
+      searchButton: 'Search',
+      table: {
+        id: 'ID',
+        name: 'Enterprise Name',
+        industry: 'Industry',
+        createdAt: 'Created At'
+      }
+    },
+    stats: {
+      valueMissing: '-',
+      enterpriseTotal: {
+        label: 'Total Enterprises',
+        desc: 'Number of enterprises currently tracked'
+      },
+      currentPageRows: {
+        label: 'Rows On Current Page',
+        desc: 'Records returned by current pagination'
+      },
+      aiAnalyzeJobs: {
+        label: 'AI Analyze Jobs',
+        desc: 'Count of historical AI analyze tasks'
+      },
+      dataFiles: {
+        label: 'Data Files',
+        desc: 'No endpoint available for file count yet'
+      }
+    },
+    quickAction: {
+      upload: {
+        title: 'Upload Data',
+        desc: 'Upload CSV/Excel/JSON datasets'
+      },
+      analysis: {
+        title: 'Data Analysis',
+        desc: 'Review financial and competitiveness analysis'
+      },
+      ai: {
+        title: 'AI Analyze',
+        desc: 'Generate deep insights with AI'
+      },
+      recommendation: {
+        title: 'Recommendations',
+        desc: 'Get actionable decision suggestions'
+      }
+    }
+  },
+  upload: {
+    title: 'Data Upload',
+    dropzone: {
+      text: 'Drag files here, or',
+      click: 'click to upload'
+    },
+    supportedFormats: {
+      label: 'Supported formats:'
+    },
+    actions: {
+      start: 'Start Upload',
+      retry: 'Upload Again'
+    },
+    preview: {
+      title: 'Data Preview',
+      count: 'Showing first 10 rows'
+    },
+    message: {
+      invalidFormat: 'Only .csv, .xlsx and .json files are supported',
+      success: 'Upload successful',
+      failed: 'Upload failed, please try again'
+    }
+  },
+  recommendations: {
+    title: 'Recommendations',
+    select: {
+      placeholder: 'Select enterprise'
+    },
+    actions: {
+      export: 'Export',
+      refresh: 'Refresh'
+    },
+    loading: {
+      generating: 'Generating recommendations...'
+    },
+    item: {
+      impactLabel: 'Expected impact: ',
+      createdAtLabel: 'Created at: '
+    },
+    empty: {
+      description: 'Select an enterprise to view intelligent recommendations',
+      cta: 'Select Enterprise'
+    },
+    category: {
+      strategy: 'Strategy',
+      operation: 'Operations',
+      financial: 'Finance',
+      market: 'Market',
+      innovation: 'Innovation',
+      general: 'General'
+    },
+    priority: {
+      high: 'High',
+      medium: 'Medium',
+      low: 'Low'
+    },
+    fallback: {
+      title: 'Smart Recommendation',
+      content: 'No recommendation content yet'
+    },
+    message: {
+      fetchFailed: 'Failed to fetch recommendations'
+    }
+  },
+  deepResearch: {
+    header: {
+      title: 'Deep Research',
+      subtitle: 'Search, fetch, and analyze market and competitor intelligence in real time'
+    },
+    form: {
+      topicLabel: 'Research Topic',
+      topicPlaceholder: 'Example: New energy vehicle market',
+      startButton: 'Start Research'
+    },
+    result: {
+      title: 'Research Result'
+    },
+    section: {
+      marketData: 'Market Data',
+      competitors: 'Competitors',
+      sources: 'Sources'
+    },
+    table: {
+      name: 'Name',
+      relevance: 'Relevance',
+      source: 'Source'
+    },
+    history: {
+      title: 'History',
+      topic: 'Topic',
+      time: 'Time',
+      status: 'Status'
+    },
+    status: {
+      searching: 'Searching',
+      fetching: 'Fetching',
+      analyzing: 'Analyzing',
+      completed: 'Completed',
+      pending: 'Pending'
+    },
+    progress: {
+      fetched: 'Fetched {fetched}/{total}'
+    },
+    message: {
+      researchFailed: 'Research failed',
+      wsError: 'WebSocket connection error',
+      topicRequired: 'Please enter a research topic',
+      started: 'Research started',
+      startFailed: 'Failed to start research'
+    }
+  },
   aiAnalyze: {
     header: {
       title: 'AI Intelligent Analysis',

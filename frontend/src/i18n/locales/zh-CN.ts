@@ -1,4 +1,4 @@
-export default {
+﻿export default {
   nav: {
     login: '登录',
     register: '注册',
@@ -36,6 +36,224 @@ export default {
       line: '折线图',
       bar: '柱状图',
       graph: '关系图'
+    }
+  },
+  auth: {
+    login: {
+      title: '茶研分析系统',
+      form: {
+        usernamePlaceholder: '用户名',
+        passwordPlaceholder: '密码'
+      },
+      action: {
+        submit: '登录'
+      },
+      link: {
+        noAccount: '还没有账号？',
+        goRegister: '立即注册'
+      },
+      validation: {
+        usernameRequired: '请输入用户名',
+        passwordRequired: '请输入密码'
+      },
+      toast: {
+        success: '登录成功',
+        failed: '登录失败',
+        networkError: '登录失败，请检查网络连接'
+      }
+    },
+    register: {
+      title: '创建账号',
+      form: {
+        emailPlaceholder: '邮箱',
+        passwordPlaceholder: '密码（至少 6 位）',
+        confirmPasswordPlaceholder: '确认密码'
+      },
+      action: {
+        submit: '注册'
+      },
+      link: {
+        hasAccount: '已有账号？',
+        backToLogin: '返回登录'
+      },
+      validation: {
+        emailRequired: '请输入邮箱',
+        emailInvalid: '请输入有效邮箱地址',
+        passwordRequired: '请输入密码',
+        passwordMin: '密码至少 6 位',
+        confirmPasswordRequired: '请再次输入密码',
+        passwordMismatch: '两次输入的密码不一致'
+      },
+      toast: {
+        success: '注册成功',
+        failed: '注册失败',
+        networkError: '注册失败，请检查网络连接'
+      }
+    }
+  },
+  home: {
+    banner: {
+      title: '欢迎使用茶研算法分析系统',
+      subtitle: '基于 AI 的企业数据分析与决策支持平台'
+    },
+    enterprise: {
+      title: '企业列表',
+      searchPlaceholder: '请输入企业名称',
+      searchButton: '搜索',
+      table: {
+        id: 'ID',
+        name: '企业名称',
+        industry: '行业',
+        createdAt: '创建时间'
+      }
+    },
+    stats: {
+      valueMissing: '-',
+      enterpriseTotal: {
+        label: '企业总数',
+        desc: '平台已纳入企业数据总量'
+      },
+      currentPageRows: {
+        label: '当前页条目',
+        desc: '当前分页返回的企业记录数'
+      },
+      aiAnalyzeJobs: {
+        label: 'AI 分析任务',
+        desc: '历史 AI 分析任务记录数'
+      },
+      dataFiles: {
+        label: '数据文件',
+        desc: '暂无可用数据文件统计接口'
+      }
+    },
+    quickAction: {
+      upload: {
+        title: '上传数据',
+        desc: '上传 CSV/Excel/JSON 数据文件'
+      },
+      analysis: {
+        title: '数据分析',
+        desc: '查看企业财务与竞争力分析'
+      },
+      ai: {
+        title: 'AI 分析',
+        desc: '使用 AI 进行深度洞察分析'
+      },
+      recommendation: {
+        title: '决策建议',
+        desc: '获取智能决策建议'
+      }
+    }
+  },
+  upload: {
+    title: '数据上传',
+    dropzone: {
+      text: '将文件拖拽到此处，或',
+      click: '点击上传'
+    },
+    supportedFormats: {
+      label: '支持以下文件格式：'
+    },
+    actions: {
+      start: '开始上传',
+      retry: '重新上传'
+    },
+    preview: {
+      title: '数据预览',
+      count: '显示前 10 条记录'
+    },
+    message: {
+      invalidFormat: '只支持 .csv, .xlsx, .json 格式文件',
+      success: '上传成功',
+      failed: '上传失败，请重试'
+    }
+  },
+  recommendations: {
+    title: '决策建议',
+    select: {
+      placeholder: '选择企业'
+    },
+    actions: {
+      export: '导出建议',
+      refresh: '刷新'
+    },
+    loading: {
+      generating: '正在生成建议...'
+    },
+    item: {
+      impactLabel: '预期影响：',
+      createdAtLabel: '生成时间：'
+    },
+    empty: {
+      description: '请先选择企业，开始查看智能决策建议',
+      cta: '选择企业开始查看'
+    },
+    category: {
+      strategy: '战略',
+      operation: '运营',
+      financial: '财务',
+      market: '市场',
+      innovation: '创新',
+      general: '通用'
+    },
+    priority: {
+      high: '高',
+      medium: '中',
+      low: '低'
+    },
+    fallback: {
+      title: '智能建议',
+      content: '暂无建议内容'
+    },
+    message: {
+      fetchFailed: '获取建议失败'
+    }
+  },
+  deepResearch: {
+    header: {
+      title: '深度研究',
+      subtitle: '实时搜索、抓取、分析市场数据与竞争对手'
+    },
+    form: {
+      topicLabel: '研究主题',
+      topicPlaceholder: '例如：新能源汽车市场',
+      startButton: '启动研究'
+    },
+    result: {
+      title: '研究结果'
+    },
+    section: {
+      marketData: '市场数据',
+      competitors: '竞争对手',
+      sources: '来源列表'
+    },
+    table: {
+      name: '名称',
+      relevance: '相关度',
+      source: '来源'
+    },
+    history: {
+      title: '历史记录',
+      topic: '主题',
+      time: '时间',
+      status: '状态'
+    },
+    status: {
+      searching: '搜索中',
+      fetching: '抓取中',
+      analyzing: '分析中',
+      completed: '已完成',
+      pending: '待启动'
+    },
+    progress: {
+      fetched: '已抓取 {fetched}/{total}'
+    },
+    message: {
+      researchFailed: '研究失败',
+      wsError: 'WebSocket 连接异常',
+      topicRequired: '请输入研究主题',
+      started: '研究已启动',
+      startFailed: '启动失败'
     }
   },
   aiAnalyze: {

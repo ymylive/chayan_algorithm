@@ -1,9 +1,9 @@
-<template>
+﻿<template>
   <div class="upload-page">
     <div class="content-shell">
       <div class="section-title">
-        <el-icon><upload-filled /></el-icon>
-        <h2>数据上传</h2>
+        <el-icon><UploadFilled /></el-icon>
+        <h2>{{ t('upload.title') }}</h2>
       </div>
 
       <el-card shadow="hover" class="upload-card">
@@ -21,12 +21,12 @@
             :auto-upload="false"
             class="upload-component"
           >
-            <el-icon class="upload-icon"><upload-filled /></el-icon>
-            <div class="upload-text">将文件拖拽到此处，或 <em>点击上传</em></div>
+            <el-icon class="upload-icon"><UploadFilled /></el-icon>
+            <div class="upload-text">{{ t('upload.dropzone.text') }} <em>{{ t('upload.dropzone.click') }}</em></div>
           </el-upload>
 
           <div class="upload-tip">
-            <span>支持以下文件格式：</span>
+            <span>{{ t('upload.supportedFormats.label') }}</span>
             <el-tag size="small">.csv</el-tag>
             <el-tag size="small" type="success">.xlsx</el-tag>
             <el-tag size="small" type="warning">.json</el-tag>
@@ -35,8 +35,8 @@
 
         <div class="upload-actions">
           <div class="action-buttons">
-            <el-button type="primary" :disabled="fileList.length === 0" @click="submitUpload">开始上传</el-button>
-            <el-button v-if="uploadComplete" @click="resetUpload">重新上传</el-button>
+            <el-button type="primary" :disabled="fileList.length === 0" @click="submitUpload">{{ t('upload.actions.start') }}</el-button>
+            <el-button v-if="uploadComplete" @click="resetUpload">{{ t('upload.actions.retry') }}</el-button>
           </div>
         </div>
       </el-card>
@@ -48,8 +48,8 @@
       <el-card v-if="previewData.length > 0" shadow="hover" class="preview-card">
         <template #header>
           <div class="preview-header">
-            <span>数据预览</span>
-            <span class="preview-count">显示前 10 条记录</span>
+            <span>{{ t('upload.preview.title') }}</span>
+            <span class="preview-count">{{ t('upload.preview.count') }}</span>
           </div>
         </template>
         <div class="preview-table-wrap">
@@ -64,9 +64,11 @@
 
 <script setup>
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 
+const { t } = useI18n()
 const uploadUrl = '/api/upload'
 const acceptTypes = '.csv,.xlsx,.json'
 const uploadRef = ref()
@@ -80,7 +82,7 @@ const previewColumns = ref([])
 const beforeUpload = (file) => {
   const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase()
   if (!['.csv', '.xlsx', '.json'].includes(ext)) {
-    ElMessage.error('只支持 .csv, .xlsx, .json 格式文件')
+    ElMessage.error(t('upload.message.invalidFormat'))
     return false
   }
   return true
@@ -98,7 +100,7 @@ const handleProgress = (event) => {
 const handleSuccess = (response) => {
   uploading.value = false
   uploadComplete.value = true
-  ElMessage.success('上传成功')
+  ElMessage.success(t('upload.message.success'))
 
   const preview = Array.isArray(response?.preview)
     ? response.preview
@@ -115,7 +117,7 @@ const handleSuccess = (response) => {
 
 const handleError = () => {
   uploading.value = false
-  ElMessage.error('上传失败，请重试')
+  ElMessage.error(t('upload.message.failed'))
 }
 
 const resetUpload = () => {
@@ -243,6 +245,7 @@ const resetUpload = () => {
 
 .action-buttons :deep(.el-button) {
   min-width: 108px;
+  min-height: 44px;
 }
 
 .preview-header {

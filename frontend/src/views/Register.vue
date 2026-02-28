@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="register-page">
     <div class="register-card">
       <div class="register-header">
@@ -7,7 +7,7 @@
           <rect x="10" y="8" width="4" height="12" rx="1" fill="#63a4ff" />
           <rect x="17" y="5" width="4" height="15" rx="1" fill="#8ab4f8" />
         </svg>
-        <h1 class="register-title">创建账号</h1>
+        <h1 class="register-title">{{ t('auth.register.title') }}</h1>
       </div>
 
       <el-form
@@ -21,7 +21,7 @@
         <el-form-item prop="email">
           <el-input
             v-model="form.email"
-            placeholder="邮箱"
+            :placeholder="t('auth.register.form.emailPlaceholder')"
             :prefix-icon="Message"
             size="large"
             clearable
@@ -32,7 +32,7 @@
           <el-input
             v-model="form.password"
             type="password"
-            placeholder="密码（至少 6 位）"
+            :placeholder="t('auth.register.form.passwordPlaceholder')"
             :prefix-icon="Lock"
             size="large"
             show-password
@@ -44,7 +44,7 @@
           <el-input
             v-model="form.confirmPassword"
             type="password"
-            placeholder="确认密码"
+            :placeholder="t('auth.register.form.confirmPasswordPlaceholder')"
             :prefix-icon="Lock"
             size="large"
             show-password
@@ -61,13 +61,13 @@
             class="register-button"
             @click="handleRegister"
           >
-            注册
+            {{ t('auth.register.action.submit') }}
           </el-button>
         </el-form-item>
 
         <div class="auth-link-row">
-          <span>已有账号？</span>
-          <router-link class="auth-link" to="/login">返回登录</router-link>
+          <span>{{ t('auth.register.link.hasAccount') }}</span>
+          <router-link class="auth-link" to="/login">{{ t('auth.register.link.backToLogin') }}</router-link>
         </div>
       </el-form>
     </div>
@@ -75,13 +75,15 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { Lock, Message } from '@element-plus/icons-vue'
 import request from '../utils/request'
 
+const { t } = useI18n()
 const router = useRouter()
 const formRef = ref<FormInstance>()
 const loading = ref(false)
@@ -92,26 +94,26 @@ const form = reactive({
   confirmPassword: ''
 })
 
-const rules: FormRules = {
+const rules = computed<FormRules>(() => ({
   email: [
-    { required: true, message: '请输入邮箱', trigger: 'blur' },
-    { type: 'email', message: '请输入有效邮箱地址', trigger: ['blur', 'change'] }
+    { required: true, message: t('auth.register.validation.emailRequired'), trigger: 'blur' },
+    { type: 'email', message: t('auth.register.validation.emailInvalid'), trigger: ['blur', 'change'] }
   ],
   password: [
-    { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 6, message: '密码至少 6 位', trigger: ['blur', 'change'] }
+    { required: true, message: t('auth.register.validation.passwordRequired'), trigger: 'blur' },
+    { min: 6, message: t('auth.register.validation.passwordMin'), trigger: ['blur', 'change'] }
   ],
   confirmPassword: [
-    { required: true, message: '请再次输入密码', trigger: 'blur' },
+    { required: true, message: t('auth.register.validation.confirmPasswordRequired'), trigger: 'blur' },
     {
       validator: (_rule: unknown, value: string, callback: (error?: Error) => void) => {
         if (!value) {
-          callback(new Error('请再次输入密码'))
+          callback(new Error(t('auth.register.validation.confirmPasswordRequired')))
           return
         }
 
         if (value !== form.password) {
-          callback(new Error('两次输入的密码不一致'))
+          callback(new Error(t('auth.register.validation.passwordMismatch')))
           return
         }
 
@@ -120,7 +122,7 @@ const rules: FormRules = {
       trigger: ['blur', 'change']
     }
   ]
-}
+}))
 
 type RegisterPayload = {
   success?: boolean
@@ -133,11 +135,11 @@ type RegisterPayload = {
 
 const getErrorMessage = (error: unknown): string => {
   if (typeof error !== 'object' || error === null || !('response' in error)) {
-    return '注册失败，请检查网络连接'
+    return t('auth.register.toast.networkError')
   }
 
   const response = (error as { response?: { data?: { message?: string } } }).response
-  return response?.data?.message || '注册失败，请检查网络连接'
+  return response?.data?.message || t('auth.register.toast.networkError')
 }
 
 const normalizeRegisterPayload = (value: unknown): RegisterPayload => {
@@ -172,13 +174,13 @@ const handleRegister = async () => {
 
     if (isSuccess) {
       sessionStorage.setItem('session_active', '1')
-      ElMessage.success(payload.message || '注册成功')
+      ElMessage.success(payload.message || t('auth.register.toast.success'))
       const redirect = (router.currentRoute.value.query.redirect as string) || '/'
       router.replace(redirect === '/login' || redirect === '/register' ? '/' : redirect)
       return
     }
 
-    ElMessage.error(payload.message || '注册失败')
+    ElMessage.error(payload.message || t('auth.register.toast.failed'))
   } catch (error) {
     sessionStorage.removeItem('session_active')
     ElMessage.error(getErrorMessage(error))

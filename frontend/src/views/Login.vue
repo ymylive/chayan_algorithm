@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="login-page">
     <div class="login-card">
       <div class="login-header">
@@ -7,7 +7,7 @@
           <rect x="10" y="8" width="4" height="12" rx="1" fill="#63a4ff" />
           <rect x="17" y="5" width="4" height="15" rx="1" fill="#8ab4f8" />
         </svg>
-        <h1 class="login-title">茶研分析系统</h1>
+        <h1 class="login-title">{{ t('auth.login.title') }}</h1>
       </div>
 
       <el-form
@@ -21,7 +21,7 @@
         <el-form-item prop="username">
           <el-input
             v-model="form.username"
-            placeholder="用户名"
+            :placeholder="t('auth.login.form.usernamePlaceholder')"
             :prefix-icon="User"
             size="large"
             clearable
@@ -32,7 +32,7 @@
           <el-input
             v-model="form.password"
             type="password"
-            placeholder="密码"
+            :placeholder="t('auth.login.form.passwordPlaceholder')"
             :prefix-icon="Lock"
             size="large"
             show-password
@@ -49,13 +49,13 @@
             class="login-button"
             @click="handleLogin"
           >
-            登录
+            {{ t('auth.login.action.submit') }}
           </el-button>
         </el-form-item>
 
         <div class="auth-link-row">
-          <span>还没有账号？</span>
-          <router-link class="auth-link" to="/register">立即注册</router-link>
+          <span>{{ t('auth.login.link.noAccount') }}</span>
+          <router-link class="auth-link" to="/register">{{ t('auth.login.link.goRegister') }}</router-link>
         </div>
       </el-form>
     </div>
@@ -63,34 +63,36 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { Lock, User } from '@element-plus/icons-vue'
 import request from '../utils/request'
 
+const { t } = useI18n()
 const router = useRouter()
 const formRef = ref<FormInstance>()
 const loading = ref(false)
 
 const form = reactive({
   username: '',
-  password: '',
+  password: ''
 })
 
-const rules: FormRules = {
-  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
-  password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
-}
+const rules = computed<FormRules>(() => ({
+  username: [{ required: true, message: t('auth.login.validation.usernameRequired'), trigger: 'blur' }],
+  password: [{ required: true, message: t('auth.login.validation.passwordRequired'), trigger: 'blur' }]
+}))
 
 const getErrorMessage = (error: unknown): string => {
   if (typeof error !== 'object' || error === null || !('response' in error)) {
-    return '登录失败，请检查网络连接'
+    return t('auth.login.toast.networkError')
   }
 
   const response = (error as { response?: { data?: { message?: string } } }).response
-  return response?.data?.message || '登录失败，请检查网络连接'
+  return response?.data?.message || t('auth.login.toast.networkError')
 }
 
 type LoginPayload = {
@@ -140,7 +142,7 @@ const handleLogin = async () => {
     loading.value = true
     const res = await request.post('/auth/login', {
       username: form.username,
-      password: form.password,
+      password: form.password
     })
     const payload = normalizeLoginPayload(res)
 
@@ -149,12 +151,12 @@ const handleLogin = async () => {
     if (isSuccess) {
       localStorage.removeItem('token')
       sessionStorage.setItem('session_active', '1')
-      ElMessage.success('登录成功')
+      ElMessage.success(t('auth.login.toast.success'))
       const redirect = (router.currentRoute.value.query.redirect as string) || '/'
       router.replace(redirect)
     } else {
       sessionStorage.removeItem('session_active')
-      ElMessage.error(payload?.message || '登录失败')
+      ElMessage.error(payload?.message || t('auth.login.toast.failed'))
     }
   } catch (err: unknown) {
     sessionStorage.removeItem('session_active')

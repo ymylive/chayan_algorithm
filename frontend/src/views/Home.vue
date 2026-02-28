@@ -1,11 +1,11 @@
-<template>
+﻿<template>
   <div class="dashboard">
     <div class="content-shell">
       <el-card class="welcome-banner" shadow="never">
         <div class="banner-content">
           <div class="banner-text">
-            <h1>欢迎使用茶研算法分析系统</h1>
-            <p>基于 AI 的企业数据分析与决策支持平台</p>
+            <h1>{{ t('home.banner.title') }}</h1>
+            <p>{{ t('home.banner.subtitle') }}</p>
           </div>
           <div class="banner-decor" aria-hidden="true">
             <span class="decor-circle circle-lg"></span>
@@ -54,13 +54,13 @@
         <template #header>
           <div class="enterprise-header">
             <div class="enterprise-heading">
-              <span class="enterprise-title">企业列表</span>
+              <span class="enterprise-title">{{ t('home.enterprise.title') }}</span>
             </div>
             <div class="search-group">
               <el-input
                 v-model="searchName"
                 class="search-input"
-                placeholder="请输入企业名称"
+                :placeholder="t('home.enterprise.searchPlaceholder')"
                 clearable
                 @keyup.enter="handleSearch"
               >
@@ -68,17 +68,17 @@
                   <el-icon><Search /></el-icon>
                 </template>
               </el-input>
-              <el-button type="primary" class="search-button" @click="handleSearch">搜索</el-button>
+              <el-button type="primary" class="search-button" @click="handleSearch">{{ t('home.enterprise.searchButton') }}</el-button>
             </div>
           </div>
         </template>
 
         <div class="table-scroll">
-          <el-table :data="enterprises" class="enterprise-table">
-            <el-table-column prop="id" label="ID" width="90" />
-            <el-table-column prop="name" label="企业名称" min-width="220" />
-            <el-table-column prop="industry" label="行业" min-width="160" />
-            <el-table-column prop="created_at" label="创建时间" min-width="200" :formatter="formatCreatedAt" />
+          <el-table :data="enterprises" class="enterprise-table" border stripe>
+            <el-table-column prop="id" :label="t('home.enterprise.table.id')" width="90" />
+            <el-table-column prop="name" :label="t('home.enterprise.table.name')" min-width="220" />
+            <el-table-column prop="industry" :label="t('home.enterprise.table.industry')" min-width="160" />
+            <el-table-column prop="created_at" :label="t('home.enterprise.table.createdAt')" min-width="200" :formatter="formatCreatedAt" />
           </el-table>
         </div>
 
@@ -100,6 +100,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, type Component } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { Cpu, DataLine, Document, PieChart, Promotion, Search, Upload } from '@element-plus/icons-vue'
 import request from '../utils/request'
@@ -128,11 +129,13 @@ interface QuickAction {
 }
 
 const router = useRouter()
+const { t, locale } = useI18n()
 const searchName = ref('')
 const page = ref(1)
 const pageSize = ref(10)
 const total = ref(0)
 const enterprises = ref<Enterprise[]>([])
+const aiAnalyzeJobCount = ref<number | null>(null)
 
 const loadEnterprises = async () => {
   const res = await request.get('/enterprises', {
@@ -149,86 +152,107 @@ const loadEnterprises = async () => {
   total.value = typeof responseTotal === 'number' ? responseTotal : list.length
 }
 
-const statsCards = computed<DashboardCard[]>(() => [
-  {
-    label: '企业总数',
-    value: total.value,
-    desc: '平台已纳入企业数据总量',
-    color: '#1a73e8',
-    icon: DataLine
-  },
-  {
-    label: '分析报告',
-    value: '12',
-    desc: '近期生成的企业分析报告',
-    color: '#34a853',
-    icon: PieChart
-  },
-  {
-    label: '决策建议',
-    value: '28',
-    desc: '已生成可执行策略建议',
-    color: '#fbbc04',
-    icon: Promotion
-  },
-  {
-    label: '数据文件',
-    value: '6',
-    desc: '当前可用数据资产文件',
-    color: '#ea4335',
-    icon: Document
+const loadAiAnalyzeJobCount = async () => {
+  try {
+    const response = await request.get('/mcp/ai-analyze/jobs', {
+      params: { limit: 100, offset: 0 }
+    })
+    const payload = response?.data && typeof response.data === 'object' ? response.data : response
+    const items = Array.isArray(payload?.data?.items)
+      ? payload.data.items
+      : (Array.isArray(payload?.items) ? payload.items : [])
+    aiAnalyzeJobCount.value = items.length
+  } catch {
+    aiAnalyzeJobCount.value = null
   }
-])
+}
 
-const quickActions: QuickAction[] = [
+const statsCards = computed<DashboardCard[]>(() => {
+  const missingValue = t('home.stats.valueMissing')
+  return [
+    {
+      label: t('home.stats.enterpriseTotal.label'),
+      value: total.value,
+      desc: t('home.stats.enterpriseTotal.desc'),
+      color: '#1a73e8',
+      icon: DataLine
+    },
+    {
+      label: t('home.stats.currentPageRows.label'),
+      value: enterprises.value.length,
+      desc: t('home.stats.currentPageRows.desc'),
+      color: '#34a853',
+      icon: PieChart
+    },
+    {
+      label: t('home.stats.aiAnalyzeJobs.label'),
+      value: aiAnalyzeJobCount.value ?? missingValue,
+      desc: t('home.stats.aiAnalyzeJobs.desc'),
+      color: '#fbbc04',
+      icon: Cpu
+    },
+    {
+      label: t('home.stats.dataFiles.label'),
+      value: missingValue,
+      desc: t('home.stats.dataFiles.desc'),
+      color: '#ea4335',
+      icon: Document
+    }
+  ]
+})
+
+const quickActions = computed<QuickAction[]>(() => [
   {
-    title: '上传数据',
-    desc: '上传 CSV/Excel/JSON 数据文件',
+    title: t('home.quickAction.upload.title'),
+    desc: t('home.quickAction.upload.desc'),
     path: '/upload',
     color: '#1a73e8',
     icon: Upload
   },
   {
-    title: '数据分析',
-    desc: '查看企业财务与竞争力分析',
+    title: t('home.quickAction.analysis.title'),
+    desc: t('home.quickAction.analysis.desc'),
     path: '/analysis',
     color: '#34a853',
     icon: PieChart
   },
   {
-    title: 'AI 分析',
-    desc: '使用 AI 进行深度洞察分析',
+    title: t('home.quickAction.ai.title'),
+    desc: t('home.quickAction.ai.desc'),
     path: '/ai-analyze',
     color: '#fbbc04',
     icon: Cpu
   },
   {
-    title: '决策建议',
-    desc: '获取智能决策建议',
+    title: t('home.quickAction.recommendation.title'),
+    desc: t('home.quickAction.recommendation.desc'),
     path: '/recommendations',
     color: '#ea4335',
     icon: Promotion
   }
-]
+])
 
 const handleSearch = () => {
   page.value = 1
-  loadEnterprises()
+  void loadEnterprises()
 }
 
 const handlePageSizeChange = () => {
   page.value = 1
-  loadEnterprises()
+  void loadEnterprises()
 }
 
 const formatCreatedAt = (_row: Enterprise, _column: unknown, value: string) => {
   if (!value) return '-'
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString('zh-CN', { hour12: false })
+  const formatLocale = locale.value === 'en-US' ? 'en-US' : 'zh-CN'
+  return date.toLocaleString(formatLocale, { hour12: false })
 }
 
-onMounted(loadEnterprises)
+onMounted(async () => {
+  await Promise.all([loadEnterprises(), loadAiAnalyzeJobCount()])
+})
 </script>
 
 <style scoped>
@@ -457,6 +481,7 @@ onMounted(loadEnterprises)
 
 .search-button {
   flex-shrink: 0;
+  min-height: 44px;
 }
 
 .table-scroll {
