@@ -256,6 +256,53 @@
       startFailed: '启动失败'
     }
   },
+  analysisPage: {
+    header: {
+      title: '多维分析',
+      subtitle: '在一个视图中查看财务、市场与竞争力维度数据。'
+    },
+    selector: {
+      title: '企业选择',
+      subtitle: '选择目标企业以加载分析数据集。',
+      placeholder: '选择企业',
+      enterpriseFallback: '企业 {id}'
+    },
+    panel: {
+      title: '企业多维看板',
+      description: '目标：{target}'
+    },
+    graph: {
+      target: '目标',
+      competitiveness: '竞争力',
+      trend: '趋势',
+      financial: '财务'
+    },
+    series: {
+      competitiveness: '竞争力',
+      trend: '趋势',
+      financialFactors: '财务指标',
+      relationships: '企业关系'
+    },
+    labels: {
+      growthRate: '增长率',
+      prediction: '预测'
+    },
+    units: {
+      index: '指数',
+      percent: '%',
+      score: '分'
+    },
+    common: {
+      na: '无',
+      target: '目标'
+    },
+    messages: {
+      retryLater: '请稍后重试。',
+      selectEnterprise: '请选择企业以查看分析数据',
+      noData: '暂无分析数据',
+      loadFailed: '加载分析数据失败'
+    }
+  },
   aiAnalyze: {
     header: {
       title: 'AI 智能分析',

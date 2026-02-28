@@ -79,6 +79,7 @@
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
+import { Document, Search } from '@element-plus/icons-vue'
 import request from '../utils/request'
 
 const { t } = useI18n()

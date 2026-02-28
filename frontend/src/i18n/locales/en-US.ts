@@ -256,6 +256,53 @@ export default {
       startFailed: 'Failed to start research'
     }
   },
+  analysisPage: {
+    header: {
+      title: 'Multi-dimensional Analysis',
+      subtitle: 'Visualize financial, market, and competitiveness dimensions in one view.'
+    },
+    selector: {
+      title: 'Enterprise Selector',
+      subtitle: 'Choose a target enterprise to load analysis datasets.',
+      placeholder: 'Select enterprise',
+      enterpriseFallback: 'Enterprise {id}'
+    },
+    panel: {
+      title: 'Enterprise Multi-dimensional Dashboard',
+      description: 'Target: {target}'
+    },
+    graph: {
+      target: 'Target',
+      competitiveness: 'Competitiveness',
+      trend: 'Trend',
+      financial: 'Financial'
+    },
+    series: {
+      competitiveness: 'Competitiveness',
+      trend: 'Trend',
+      financialFactors: 'Financial Factors',
+      relationships: 'Enterprise Relationships'
+    },
+    labels: {
+      growthRate: 'Growth Rate',
+      prediction: 'Prediction'
+    },
+    units: {
+      index: 'index',
+      percent: '%',
+      score: 'score'
+    },
+    common: {
+      na: 'N/A',
+      target: 'Target'
+    },
+    messages: {
+      retryLater: 'Please retry later.',
+      selectEnterprise: 'Select an enterprise to view analysis data',
+      noData: 'No analysis data available',
+      loadFailed: 'Failed to load analysis data'
+    }
+  },
   aiAnalyze: {
     header: {
       title: 'AI Intelligent Analysis',

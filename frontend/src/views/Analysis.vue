@@ -1,16 +1,16 @@
-<template>
+﻿<template>
   <div class="analysis-page">
     <div class="content-shell">
       <header class="page-header">
-        <h2 class="page-title">Multi-dimensional Analysis</h2>
-        <p class="page-subtitle">Visualize financial, market, and competitiveness dimensions in one view.</p>
+        <h2 class="page-title">{{ t('analysisPage.header.title') }}</h2>
+        <p class="page-subtitle">{{ t('analysisPage.header.subtitle') }}</p>
       </header>
 
-      <AppCard title="Enterprise Selector" subtitle="Choose a target enterprise to load analysis datasets.">
+      <AppCard :title="t('analysisPage.selector.title')" :subtitle="t('analysisPage.selector.subtitle')">
         <div class="selector-row">
           <el-select
             v-model="selectedId"
-            placeholder="Select enterprise"
+            :placeholder="t('analysisPage.selector.placeholder')"
             class="selector"
             filterable
             @change="fetchAnalysis"
@@ -18,7 +18,7 @@
             <el-option
               v-for="item in enterprises"
               :key="String(item.id)"
-              :label="item.name || `Enterprise ${item.id}`"
+              :label="item.name || t('analysisPage.selector.enterpriseFallback', { id: item.id })"
               :value="String(item.id)"
             />
           </el-select>
@@ -32,14 +32,14 @@
         </AppCard>
       </section>
 
-      <el-result v-else-if="errorMessage" status="warning" :title="errorMessage" sub-title="Please retry later." />
-      <el-empty v-else-if="!selectedId" description="Select an enterprise to view analysis data" />
-      <el-empty v-else-if="!analysisData" description="No analysis data available" />
+      <el-result v-else-if="errorMessage" status="warning" :title="errorMessage" :sub-title="t('analysisPage.messages.retryLater')" />
+      <el-empty v-else-if="!selectedId" :description="t('analysisPage.messages.selectEnterprise')" />
+      <el-empty v-else-if="!analysisData" :description="t('analysisPage.messages.noData')" />
 
       <MultiDimensionalInsightPanel
         v-else
-        title="Enterprise Multi-dimensional Dashboard"
-        :description="`Target: ${selectedName || 'N/A'}`"
+        :title="t('analysisPage.panel.title')"
+        :description="t('analysisPage.panel.description', { target: selectedName || t('analysisPage.common.na') })"
         :data="panelData"
       />
     </div>
@@ -48,6 +48,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import request from '../utils/request'
 import AppCard from '../components/base/AppCard.vue'
 import AppSkeleton from '../components/feedback/AppSkeleton.vue'
@@ -69,6 +70,7 @@ interface AnalysisPayload {
   competitiveness: Record<string, unknown>
 }
 
+const { t } = useI18n()
 const selectedId = ref('')
 const enterprises = ref<Enterprise[]>([])
 const analysisData = ref<AnalysisPayload | null>(null)
@@ -117,27 +119,22 @@ const normalizeRows = (rows: AnalysisRow[]): AnalysisPayload | null => {
 
 const buildRadarData = (competitiveness: Record<string, unknown>) => {
   const factorEntries = getNumericEntries(competitiveness.factors)
-  if (factorEntries.length) {
+
+  if (!factorEntries.length) {
     return {
-      indicators: factorEntries.map(([name, value]) => ({
-        name,
-        max: Math.max(100, Math.ceil(Math.abs(value) * 1.25))
-      })),
-      values: factorEntries.map(([, value]) => value),
-      seriesName: 'Competitiveness'
+      indicators: [],
+      values: [],
+      seriesName: t('analysisPage.series.competitiveness')
     }
   }
 
   return {
-    indicators: [
-      { name: 'Market Share', max: 100 },
-      { name: 'Innovation', max: 100 },
-      { name: 'Brand Equity', max: 100 },
-      { name: 'Customer Value', max: 100 },
-      { name: 'Profitability', max: 100 }
-    ],
-    values: [78, 72, 84, 80, 74],
-    seriesName: 'Competitiveness'
+    indicators: factorEntries.map(([name, value]) => ({
+      name,
+      max: Math.max(100, Math.ceil(Math.abs(value) * 1.25))
+    })),
+    values: factorEntries.map(([, value]) => value),
+    seriesName: t('analysisPage.series.competitiveness')
   }
 }
 
@@ -147,8 +144,8 @@ const buildLineData = (marketTrend: Record<string, unknown>) => {
     return {
       categories: trendEntries.map(([name]) => name),
       values: trendEntries.map(([, value]) => value),
-      seriesName: 'Trend',
-      unit: 'index'
+      seriesName: t('analysisPage.series.trend'),
+      unit: t('analysisPage.units.index')
     }
   }
 
@@ -156,18 +153,21 @@ const buildLineData = (marketTrend: Record<string, unknown>) => {
   const prediction = toNumber(marketTrend.prediction)
   if (growthRate !== null || prediction !== null) {
     return {
-      categories: ['Growth Rate', 'Prediction'],
+      categories: [
+        t('analysisPage.labels.growthRate'),
+        t('analysisPage.labels.prediction')
+      ],
       values: [growthRate ?? 0, prediction ?? 0],
-      seriesName: 'Trend',
-      unit: '%'
+      seriesName: t('analysisPage.series.trend'),
+      unit: t('analysisPage.units.percent')
     }
   }
 
   return {
-    categories: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
-    values: [110, 124, 118, 136, 149, 163],
-    seriesName: 'Trend',
-    unit: 'index'
+    categories: [],
+    values: [],
+    seriesName: t('analysisPage.series.trend'),
+    unit: t('analysisPage.units.index')
   }
 }
 
@@ -180,16 +180,26 @@ const buildBarData = (financial: Record<string, unknown>) => {
         if (Math.abs(value) <= 1) return Number((value * 100).toFixed(2))
         return Number(value.toFixed(2))
       }),
-      seriesName: 'Financial Factors',
-      unit: 'score'
+      seriesName: t('analysisPage.series.financialFactors'),
+      unit: t('analysisPage.units.score')
+    }
+  }
+
+  const numericEntries = getNumericEntries(financial).slice(0, 8)
+  if (!numericEntries.length) {
+    return {
+      categories: [],
+      values: [],
+      seriesName: t('analysisPage.series.financialFactors'),
+      unit: t('analysisPage.units.score')
     }
   }
 
   return {
-    categories: ['Revenue', 'Cost', 'Margin', 'Assets', 'Liability'],
-    values: [220, 156, 92, 278, 121],
-    seriesName: 'Financial Factors',
-    unit: 'score'
+    categories: numericEntries.map(([name]) => name),
+    values: numericEntries.map(([, value]) => Number(value.toFixed(2))),
+    seriesName: t('analysisPage.series.financialFactors'),
+    unit: t('analysisPage.units.score')
   }
 }
 
@@ -198,7 +208,7 @@ const buildGraphData = (
   marketTrend: Record<string, unknown>,
   financial: Record<string, unknown>
 ) => {
-  const rootName = selectedName.value || `Enterprise ${selectedId.value || 'Target'}`
+  const rootName = selectedName.value || t('analysisPage.selector.enterpriseFallback', { id: selectedId.value || t('analysisPage.common.target') })
   const competitorEntries = getNumericEntries(competitiveness.factors).slice(0, 4)
   const trendEntries = getNumericEntries(marketTrend.trends).slice(0, 3)
   const financeEntries = getNumericEntries(financial.factors).slice(0, 3)
@@ -229,14 +239,14 @@ const buildGraphData = (
 
   return {
     categories: [
-      { name: 'Target' },
-      { name: 'Competitiveness' },
-      { name: 'Trend' },
-      { name: 'Financial' }
+      { name: t('analysisPage.graph.target') },
+      { name: t('analysisPage.graph.competitiveness') },
+      { name: t('analysisPage.graph.trend') },
+      { name: t('analysisPage.graph.financial') }
     ],
     nodes,
     links,
-    seriesName: 'Enterprise Relationships'
+    seriesName: t('analysisPage.series.relationships')
   }
 }
 
@@ -283,7 +293,7 @@ const fetchAnalysis = async () => {
     analysisData.value = normalizeRows(rows as AnalysisRow[])
   } catch {
     analysisData.value = null
-    errorMessage.value = 'Failed to load analysis data'
+    errorMessage.value = t('analysisPage.messages.loadFailed')
   } finally {
     loading.value = false
   }

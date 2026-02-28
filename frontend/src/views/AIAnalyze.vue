@@ -337,6 +337,7 @@
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
+import { Cpu, Document } from '@element-plus/icons-vue'
 import request from '../utils/request'
 import MultiDimensionalInsightPanel from '../components/charts/MultiDimensionalInsightPanel.vue'
 import StreamingNarrative from '../components/llm/StreamingNarrative.vue'
