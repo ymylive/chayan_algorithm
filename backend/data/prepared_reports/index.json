@@ -11,7 +11,49 @@
     "sha256": "97dfd3d64d6a3cdc5ef7d54ff32d92cda17eee9aa4bb78b0e5b7af664119d2ca",
     "contentType": "text/html",
     "cached": false,
-    "fetchedAt": "2026-02-28T05:11:59Z"
+    "fetchedAt": "2026-02-28T06:02:20Z"
+  },
+  {
+    "sourceType": "sec_filing",
+    "ticker": "SBUX",
+    "cik": "0000829224",
+    "form": "10-K",
+    "filingDate": "2025-11-14",
+    "url": "https://www.sec.gov/Archives/edgar/data/829224/000082922425000114/sbux-20250928.htm",
+    "path": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\sec\\SBUX\\SBUX_10-K_2025-11-14_000082922425000114_sbux-20250928.htm.html",
+    "size": 3126999,
+    "sha256": "f169ab51a70181b9d48f6324fe8ccba83f524110e9bbac620afc97d432063131",
+    "contentType": "text/html",
+    "cached": false,
+    "fetchedAt": "2026-02-28T06:02:23Z"
+  },
+  {
+    "sourceType": "sec_filing",
+    "ticker": "SBUX",
+    "cik": "0000829224",
+    "form": "10-Q",
+    "filingDate": "2025-07-29",
+    "url": "https://www.sec.gov/Archives/edgar/data/829224/000082922425000058/sbux-20250629.htm",
+    "path": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\sec\\SBUX\\SBUX_10-Q_2025-07-29_000082922425000058_sbux-20250629.htm.html",
+    "size": 2334057,
+    "sha256": "c0ddc6311bc3ce72c997583cbb71667fa941bb3605f2d32b45e79c38b5ce9515",
+    "contentType": "text/html",
+    "cached": false,
+    "fetchedAt": "2026-02-28T06:02:24Z"
+  },
+  {
+    "sourceType": "sec_filing",
+    "ticker": "SBUX",
+    "cik": "0000829224",
+    "form": "10-Q",
+    "filingDate": "2025-04-29",
+    "url": "https://www.sec.gov/Archives/edgar/data/829224/000082922425000034/sbux-20250330.htm",
+    "path": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\sec\\SBUX\\SBUX_10-Q_2025-04-29_000082922425000034_sbux-20250330.htm.html",
+    "size": 2318140,
+    "sha256": "5636e59885534f700055314152bd35266bb866f03507e53d69571145cf67a8a6",
+    "contentType": "text/html",
+    "cached": false,
+    "fetchedAt": "2026-02-28T06:02:26Z"
   },
   {
     "sourceType": "sec_companyfacts",
@@ -23,7 +65,7 @@
     "sha256": "dc8e9041c40a0eaf33a5c7a4963619faa466387ebcf9ff9b0473967e57b3979a",
     "contentType": "application/json",
     "cached": false,
-    "fetchedAt": "2026-02-28T05:12:03Z"
+    "fetchedAt": "2026-02-28T06:02:29Z"
   },
   {
     "sourceType": "sec_filing",
@@ -37,7 +79,49 @@
     "sha256": "64e680630d5fe4448db26ff695aaf50189ec23427566f01508d3bf27aa8d8b3e",
     "contentType": "text/html",
     "cached": false,
-    "fetchedAt": "2026-02-28T05:12:05Z"
+    "fetchedAt": "2026-02-28T06:02:31Z"
+  },
+  {
+    "sourceType": "sec_filing",
+    "ticker": "MCD",
+    "cik": "0000063908",
+    "form": "10-Q",
+    "filingDate": "2025-11-05",
+    "url": "https://www.sec.gov/Archives/edgar/data/63908/000006390825000059/mcd-20250930.htm",
+    "path": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\sec\\MCD\\MCD_10-Q_2025-11-05_000006390825000059_mcd-20250930.htm.html",
+    "size": 1579805,
+    "sha256": "f7125df152e7c54bb3c01b54d15eea3c480cd3d3a1b71bd6f9a1199d03dd3b59",
+    "contentType": "text/html",
+    "cached": false,
+    "fetchedAt": "2026-02-28T06:02:32Z"
+  },
+  {
+    "sourceType": "sec_filing",
+    "ticker": "MCD",
+    "cik": "0000063908",
+    "form": "10-Q",
+    "filingDate": "2025-08-06",
+    "url": "https://www.sec.gov/Archives/edgar/data/63908/000006390825000039/mcd-20250630.htm",
+    "path": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\sec\\MCD\\MCD_10-Q_2025-08-06_000006390825000039_mcd-20250630.htm.html",
+    "size": 1560273,
+    "sha256": "2ca150281abeb34698902f9a7f8abaf7ddfee934d6808373e3c2437bbb5d9848",
+    "contentType": "text/html",
+    "cached": false,
+    "fetchedAt": "2026-02-28T06:02:33Z"
+  },
+  {
+    "sourceType": "sec_filing",
+    "ticker": "MCD",
+    "cik": "0000063908",
+    "form": "10-Q",
+    "filingDate": "2025-05-12",
+    "url": "https://www.sec.gov/Archives/edgar/data/63908/000006390825000025/mcd-20250331.htm",
+    "path": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\sec\\MCD\\MCD_10-Q_2025-05-12_000006390825000025_mcd-20250331.htm.html",
+    "size": 1134292,
+    "sha256": "102fce553bde2ab5d4b29e1fb54cdb9f2b519cc83419bb5eb2c657c9d63760ec",
+    "contentType": "text/html",
+    "cached": false,
+    "fetchedAt": "2026-02-28T06:02:35Z"
   },
   {
     "sourceType": "sec_companyfacts",
@@ -49,7 +133,7 @@
     "sha256": "44fbddfc296dd2e0e7d9089c5d8d0bea7105c5569f7d274a2f3f479c4633b22c",
     "contentType": "application/json",
     "cached": false,
-    "fetchedAt": "2026-02-28T05:12:08Z"
+    "fetchedAt": "2026-02-28T06:02:38Z"
   },
   {
     "sourceType": "sec_filing",
@@ -63,7 +147,49 @@
     "sha256": "22dd41f1aab4928f94a5f80e9497cf6203f27baa7c3f4e9088a6dd0aee929c66",
     "contentType": "text/html",
     "cached": false,
-    "fetchedAt": "2026-02-28T05:12:11Z"
+    "fetchedAt": "2026-02-28T06:02:42Z"
+  },
+  {
+    "sourceType": "sec_filing",
+    "ticker": "KO",
+    "cik": "0000021344",
+    "form": "10-Q",
+    "filingDate": "2025-10-23",
+    "url": "https://www.sec.gov/Archives/edgar/data/21344/000162828025046054/ko-20250926.htm",
+    "path": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\sec\\KO\\KO_10-Q_2025-10-23_000162828025046054_ko-20250926.htm.html",
+    "size": 2165835,
+    "sha256": "b4bb68b8f23b1c2eede2074a5b33f8d25fc1a1be5d89c4a1f5d733cc5974ef20",
+    "contentType": "text/html",
+    "cached": false,
+    "fetchedAt": "2026-02-28T06:02:44Z"
+  },
+  {
+    "sourceType": "sec_filing",
+    "ticker": "KO",
+    "cik": "0000021344",
+    "form": "10-Q",
+    "filingDate": "2025-07-24",
+    "url": "https://www.sec.gov/Archives/edgar/data/21344/000002134425000061/ko-20250627.htm",
+    "path": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\sec\\KO\\KO_10-Q_2025-07-24_000002134425000061_ko-20250627.htm.html",
+    "size": 2113663,
+    "sha256": "8b5677fe84c27fa746125f5f2ce2ed0349c62196eed2a74d2ab078f13f3f3f8d",
+    "contentType": "text/html",
+    "cached": false,
+    "fetchedAt": "2026-02-28T06:02:46Z"
+  },
+  {
+    "sourceType": "sec_filing",
+    "ticker": "KO",
+    "cik": "0000021344",
+    "form": "10-Q",
+    "filingDate": "2025-05-01",
+    "url": "https://www.sec.gov/Archives/edgar/data/21344/000002134425000029/ko-20250328.htm",
+    "path": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\sec\\KO\\KO_10-Q_2025-05-01_000002134425000029_ko-20250328.htm.html",
+    "size": 1520559,
+    "sha256": "1a17337cbe68d102192b31f2e93783c696ca3ce202144ae2a1babc58e2837f5b",
+    "contentType": "text/html",
+    "cached": false,
+    "fetchedAt": "2026-02-28T06:02:48Z"
   },
   {
     "sourceType": "sec_companyfacts",
@@ -75,7 +201,7 @@
     "sha256": "651e998feadad2adc1a6d4a8289ef4267ec4bc319fe60db510f013681fb8cccc",
     "contentType": "application/json",
     "cached": false,
-    "fetchedAt": "2026-02-28T05:12:15Z"
+    "fetchedAt": "2026-02-28T06:02:51Z"
   },
   {
     "sourceType": "sec_filing",
@@ -89,7 +215,49 @@
     "sha256": "7b93bbae6ad51b622e028281184f3756c9420ff87e03b2ebebc4a44ec51df22a",
     "contentType": "text/html",
     "cached": false,
-    "fetchedAt": "2026-02-28T05:12:20Z"
+    "fetchedAt": "2026-02-28T06:02:56Z"
+  },
+  {
+    "sourceType": "sec_filing",
+    "ticker": "PEP",
+    "cik": "0000077476",
+    "form": "10-Q",
+    "filingDate": "2025-10-09",
+    "url": "https://www.sec.gov/Archives/edgar/data/77476/000007747625000053/pep-20250906.htm",
+    "path": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\sec\\PEP\\PEP_10-Q_2025-10-09_000007747625000053_pep-20250906.htm.html",
+    "size": 2676863,
+    "sha256": "dcc2dbe1d9ffab8e7185d52a0643074db734968c1c1af2297ed58087ef785931",
+    "contentType": "text/html",
+    "cached": false,
+    "fetchedAt": "2026-02-28T06:02:58Z"
+  },
+  {
+    "sourceType": "sec_filing",
+    "ticker": "PEP",
+    "cik": "0000077476",
+    "form": "10-Q",
+    "filingDate": "2025-07-17",
+    "url": "https://www.sec.gov/Archives/edgar/data/77476/000007747625000044/pep-20250614.htm",
+    "path": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\sec\\PEP\\PEP_10-Q_2025-07-17_000007747625000044_pep-20250614.htm.html",
+    "size": 2501173,
+    "sha256": "94d4d69761416e17831e404ff0fc53bdbb69f218d558cc0aab845f830071847b",
+    "contentType": "text/html",
+    "cached": false,
+    "fetchedAt": "2026-02-28T06:03:00Z"
+  },
+  {
+    "sourceType": "sec_filing",
+    "ticker": "PEP",
+    "cik": "0000077476",
+    "form": "10-Q",
+    "filingDate": "2025-04-24",
+    "url": "https://www.sec.gov/Archives/edgar/data/77476/000007747625000019/pep-20250322.htm",
+    "path": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\sec\\PEP\\PEP_10-Q_2025-04-24_000007747625000019_pep-20250322.htm.html",
+    "size": 1589776,
+    "sha256": "809d4c775c1874627e552d1d9fa5fdaf1d606823acc51a53cd8a80e2e58abf46",
+    "contentType": "text/html",
+    "cached": false,
+    "fetchedAt": "2026-02-28T06:03:02Z"
   },
   {
     "sourceType": "sec_companyfacts",
@@ -101,7 +269,7 @@
     "sha256": "2032629e1fa424fb0aa7f476277dbfb2bd89c3ed531e6453380a9b2d162d1436",
     "contentType": "application/json",
     "cached": false,
-    "fetchedAt": "2026-02-28T05:12:24Z"
+    "fetchedAt": "2026-02-28T06:03:06Z"
   },
   {
     "sourceType": "sec_filing",
@@ -115,7 +283,49 @@
     "sha256": "3a3d9336a924488440e83b811ba354f654738cc822b6eb69ed6063e8cf348542",
     "contentType": "text/html",
     "cached": false,
-    "fetchedAt": "2026-02-28T05:12:25Z"
+    "fetchedAt": "2026-02-28T06:03:07Z"
+  },
+  {
+    "sourceType": "sec_filing",
+    "ticker": "AAPL",
+    "cik": "0000320193",
+    "form": "10-K",
+    "filingDate": "2025-10-31",
+    "url": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/aapl-20250927.htm",
+    "path": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\sec\\AAPL\\AAPL_10-K_2025-10-31_000032019325000079_aapl-20250927.htm.html",
+    "size": 1520208,
+    "sha256": "548ae59778cf08ee0f2ee088e7ece20d947076c3c01f74d2d65db4c2777e436a",
+    "contentType": "text/html",
+    "cached": false,
+    "fetchedAt": "2026-02-28T06:03:08Z"
+  },
+  {
+    "sourceType": "sec_filing",
+    "ticker": "AAPL",
+    "cik": "0000320193",
+    "form": "10-Q",
+    "filingDate": "2025-08-01",
+    "url": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000073/aapl-20250628.htm",
+    "path": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\sec\\AAPL\\AAPL_10-Q_2025-08-01_000032019325000073_aapl-20250628.htm.html",
+    "size": 888048,
+    "sha256": "ec86034c4029ea892d587f95cf5c9c2e3a08228929fbabf269dec3c1cb26d768",
+    "contentType": "text/html",
+    "cached": false,
+    "fetchedAt": "2026-02-28T06:03:09Z"
+  },
+  {
+    "sourceType": "sec_filing",
+    "ticker": "AAPL",
+    "cik": "0000320193",
+    "form": "10-Q",
+    "filingDate": "2025-05-02",
+    "url": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000057/aapl-20250329.htm",
+    "path": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\sec\\AAPL\\AAPL_10-Q_2025-05-02_000032019325000057_aapl-20250329.htm.html",
+    "size": 889977,
+    "sha256": "2fd930cba232625de5067cfc04fb106095715b23e34d3a0165e08734c0082083",
+    "contentType": "text/html",
+    "cached": false,
+    "fetchedAt": "2026-02-28T06:03:10Z"
   },
   {
     "sourceType": "sec_companyfacts",
@@ -127,7 +337,7 @@
     "sha256": "682f84cdce3e426383724a6ed82352a33972024254b6c3308072f9ec93115b22",
     "contentType": "application/json",
     "cached": false,
-    "fetchedAt": "2026-02-28T05:12:29Z"
+    "fetchedAt": "2026-02-28T06:03:13Z"
   },
   {
     "sourceType": "sec_filing",
@@ -141,7 +351,49 @@
     "sha256": "90d5d2bc4057df41c645f85dcebe575af9b0953a6a1902d189297bec17fd440a",
     "contentType": "text/html",
     "cached": false,
-    "fetchedAt": "2026-02-28T05:12:31Z"
+    "fetchedAt": "2026-02-28T06:03:16Z"
+  },
+  {
+    "sourceType": "sec_filing",
+    "ticker": "TSLA",
+    "cik": "0001318605",
+    "form": "10-Q",
+    "filingDate": "2025-10-23",
+    "url": "https://www.sec.gov/Archives/edgar/data/1318605/000162828025045968/tsla-20250930.htm",
+    "path": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\sec\\TSLA\\TSLA_10-Q_2025-10-23_000162828025045968_tsla-20250930.htm.html",
+    "size": 1573631,
+    "sha256": "2e09ef916548c0e2b1fde8f5109a9affd1f652535382ba686aa3920eef38332b",
+    "contentType": "text/html",
+    "cached": false,
+    "fetchedAt": "2026-02-28T06:03:17Z"
+  },
+  {
+    "sourceType": "sec_filing",
+    "ticker": "TSLA",
+    "cik": "0001318605",
+    "form": "10-Q",
+    "filingDate": "2025-07-24",
+    "url": "https://www.sec.gov/Archives/edgar/data/1318605/000162828025035806/tsla-20250630.htm",
+    "path": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\sec\\TSLA\\TSLA_10-Q_2025-07-24_000162828025035806_tsla-20250630.htm.html",
+    "size": 1518452,
+    "sha256": "69345333fcae80af2bc0f4866730c942aab746e6d38f4157832220c74ca65dee",
+    "contentType": "text/html",
+    "cached": false,
+    "fetchedAt": "2026-02-28T06:03:18Z"
+  },
+  {
+    "sourceType": "sec_filing",
+    "ticker": "TSLA",
+    "cik": "0001318605",
+    "form": "10-Q",
+    "filingDate": "2025-04-23",
+    "url": "https://www.sec.gov/Archives/edgar/data/1318605/000162828025018911/tsla-20250331.htm",
+    "path": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\sec\\TSLA\\TSLA_10-Q_2025-04-23_000162828025018911_tsla-20250331.htm.html",
+    "size": 1225850,
+    "sha256": "9eb83dda9c38fe3ec8bf52aec87fe21cfe10c063b5d7c987df370b9c77542c3a",
+    "contentType": "text/html",
+    "cached": false,
+    "fetchedAt": "2026-02-28T06:03:19Z"
   },
   {
     "sourceType": "sec_companyfacts",
@@ -153,7 +405,7 @@
     "sha256": "ebb638714fc048908fd032ee7dbfa9bb1285efc29070247d8154fd11c7d02813",
     "contentType": "application/json",
     "cached": false,
-    "fetchedAt": "2026-02-28T05:12:33Z"
+    "fetchedAt": "2026-02-28T06:03:22Z"
   },
   {
     "sourceType": "sec_universe",
@@ -164,7 +416,7 @@
     "contentType": "application/json",
     "companyCount": 10412,
     "normalizedPath": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\universe\\sec_company_tickers.normalized.jsonl",
-    "fetchedAt": "2026-02-28T05:12:34Z"
+    "fetchedAt": "2026-02-28T06:03:23Z"
   },
   {
     "sourceType": "hkex_universe",
@@ -174,7 +426,30 @@
     "sha256": "897959c366f528058bd8ad1a4e3b3db5768155a3af50d4e289212aef169642a9",
     "contentType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "cached": false,
-    "fetchedAt": "2026-02-28T05:12:42Z"
+    "fetchedAt": "2026-02-28T06:03:24Z"
+  },
+  {
+    "sourceType": "sse_universe",
+    "url": "http://query.sse.com.cn/security/stock/getStockListData2.do",
+    "path": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\universe\\sse_a_share_list.json",
+    "size": 1171033,
+    "sha256": "f1953de40278b49ae896deaa273c0675097eb1a697fc4cb58414d29f388de143",
+    "contentType": "application/json",
+    "companyCount": 2309,
+    "normalizedPath": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\universe\\sse_a_share_list.normalized.jsonl",
+    "fetchedAt": "2026-02-28T06:03:28Z"
+  },
+  {
+    "sourceType": "szse_universe",
+    "url": "http://www.cninfo.com.cn/new/data/szse_stock.json",
+    "path": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\universe\\szse_a_share_list.json",
+    "size": 443855,
+    "sha256": "e463ef1724faf714e47813ba2a3949b91f8b769078f2611294bab5f4ce05453e",
+    "contentType": "application/json",
+    "companyCount": 3071,
+    "normalizedPath": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\universe\\szse_a_share_list.normalized.jsonl",
+    "fallback": true,
+    "fetchedAt": "2026-02-28T06:03:32Z"
   },
   {
     "sourceType": "web_public_report_direct",
@@ -185,7 +460,7 @@
     "sha256": "921caa85e2691dba1e28199fd58e498cd747750659b5e54af911ec48186de4f7",
     "contentType": "application/pdf",
     "cached": false,
-    "fetchedAt": "2026-02-28T05:12:43Z"
+    "fetchedAt": "2026-02-28T06:03:33Z"
   },
   {
     "sourceType": "web_public_report_direct",
@@ -196,7 +471,7 @@
     "sha256": "8b12ea21761a2e38987b01f95c76a118bdbea30a178daf4a3f4f8b1af6d66432",
     "contentType": "application/pdf",
     "cached": false,
-    "fetchedAt": "2026-02-28T05:12:43Z"
+    "fetchedAt": "2026-02-28T06:03:33Z"
   },
   {
     "sourceType": "web_public_report_direct",
@@ -207,7 +482,7 @@
     "sha256": "8f0fa25625989d6559658f0e4d148742a08bb2d1faa9be5e36d9d94bc113ee1e",
     "contentType": "text/html; charset=utf-8",
     "cached": false,
-    "fetchedAt": "2026-02-28T05:12:44Z"
+    "fetchedAt": "2026-02-28T06:03:33Z"
   },
   {
     "sourceType": "web_public_report",
@@ -219,7 +494,7 @@
     "sha256": "8f0fa25625989d6559658f0e4d148742a08bb2d1faa9be5e36d9d94bc113ee1e",
     "contentType": "text/html; charset=utf-8",
     "cached": false,
-    "fetchedAt": "2026-02-28T05:12:46Z"
+    "fetchedAt": "2026-02-28T06:03:35Z"
   },
   {
     "sourceType": "web_public_report_pdf",
@@ -232,7 +507,7 @@
     "sha256": "b4c3a5b1d2af2797089803066d182cab8f97b8c1aed30a4495ae770849e9d9fe",
     "contentType": "application/pdf",
     "cached": false,
-    "fetchedAt": "2026-02-28T05:12:46Z"
+    "fetchedAt": "2026-02-28T06:03:35Z"
   },
   {
     "sourceType": "web_public_report_pdf",
@@ -245,7 +520,7 @@
     "sha256": "be639eb8b5729bc7d8a22c77ebc4d1739fd45331d84d2de38eebd88c8d2bec9b",
     "contentType": "application/pdf",
     "cached": false,
-    "fetchedAt": "2026-02-28T05:12:47Z"
+    "fetchedAt": "2026-02-28T06:03:37Z"
   },
   {
     "sourceType": "web_public_report_pdf",
@@ -258,7 +533,45 @@
     "sha256": "9c4ab6ff33ce2a3165643b0dcf4281963c0245147119d3cd31b675104710c1ec",
     "contentType": "application/pdf",
     "cached": false,
-    "fetchedAt": "2026-02-28T05:12:48Z"
+    "fetchedAt": "2026-02-28T06:03:37Z"
+  },
+  {
+    "sourceType": "web_public_report",
+    "company": "奈雪的茶",
+    "query": "Nayuki financial reports",
+    "url": "https://ir.naixue.com/en/investors/financial-reports/?page=2",
+    "path": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\web\\奈雪的茶\\01_02_ir.naixue.com_1b2e2149fb.html",
+    "size": 22428,
+    "sha256": "aac8e98b490bcdb7fa3cefca1d423d3cee23f18bf4bd47d41eca7e840b144a60",
+    "contentType": "text/html; charset=utf-8",
+    "cached": false,
+    "fetchedAt": "2026-02-28T06:03:38Z"
+  },
+  {
+    "sourceType": "web_public_report_pdf",
+    "company": "奈雪的茶",
+    "query": "Nayuki financial reports",
+    "url": "https://ir.naixue.com/media/mxffonh2/annual-results-announcement-for-the-year-ended-december-31-2023.pdf",
+    "referrer": "https://ir.naixue.com/en/investors/financial-reports/?page=2",
+    "path": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\web\\奈雪的茶\\01_02_01_ir.naixue.com_c72915d026.pdf",
+    "size": 181338,
+    "sha256": "b74c09fc071d046bd7c3e13f780533b4392d22ea2202c96f84b8f9c5d64a2fb4",
+    "contentType": "application/pdf",
+    "cached": false,
+    "fetchedAt": "2026-02-28T06:03:38Z"
+  },
+  {
+    "sourceType": "web_public_report_pdf",
+    "company": "奈雪的茶",
+    "query": "Nayuki financial reports",
+    "url": "https://ir.naixue.com/media/2h3l3gzh/nayuki-2023-interim-results-conference-transcript-eng.pdf",
+    "referrer": "https://ir.naixue.com/en/investors/financial-reports/?page=2",
+    "path": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\web\\奈雪的茶\\01_02_02_ir.naixue.com_6b4550a346.pdf",
+    "size": 216693,
+    "sha256": "33471f60cfbb3ea07168c1b053af4f9c7a92763dd07222e9c42e4424d4769582",
+    "contentType": "application/pdf",
+    "cached": false,
+    "fetchedAt": "2026-02-28T06:03:39Z"
   },
   {
     "sourceType": "web_public_report",
@@ -270,7 +583,31 @@
     "sha256": "391e66048b375ebbbaff437dc8a3db43697d2681c40edd0ad09990db6483aa16",
     "contentType": "text/html; charset=utf-8",
     "cached": false,
-    "fetchedAt": "2026-02-28T05:12:49Z"
+    "fetchedAt": "2026-02-28T06:03:41Z"
+  },
+  {
+    "sourceType": "web_public_report",
+    "company": "奈雪的茶",
+    "query": "site:hkexnews.hk Nayuki annual report",
+    "url": "https://www1.hkexnews.hk/listedco/listconews/sehk/2025/0429/2025042901441.pdf",
+    "path": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\web\\奈雪的茶\\03_01_www1.hkexnews.hk_ff4ef090e8.pdf",
+    "size": 2059458,
+    "sha256": "45c98883d7bed80528faec83362b0b565e94fa356e159213aed407888eac1626",
+    "contentType": "application/pdf",
+    "cached": false,
+    "fetchedAt": "2026-02-28T06:03:44Z"
+  },
+  {
+    "sourceType": "web_public_report",
+    "company": "奈雪的茶",
+    "query": "site:hkexnews.hk Nayuki annual report",
+    "url": "https://www.hkexnews.hk/listedco/listconews/sehk/2025/0327/2025032702339.pdf",
+    "path": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\web\\奈雪的茶\\03_02_www.hkexnews.hk_e15dd3c021.pdf",
+    "size": 156796,
+    "sha256": "9c4ab6ff33ce2a3165643b0dcf4281963c0245147119d3cd31b675104710c1ec",
+    "contentType": "application/pdf",
+    "cached": false,
+    "fetchedAt": "2026-02-28T06:03:44Z"
   },
   {
     "sourceType": "web_public_report_direct",
@@ -278,10 +615,10 @@
     "url": "https://www1.hkexnews.hk/search/titlesearch.xhtml?lang=en",
     "path": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\web\\茶百道\\direct_01_www1.hkexnews.hk_5ed83111c3.html",
     "size": 12282,
-    "sha256": "62a4e1e22ac9b6f62c4063d9ba8e0a18286da4cc61139e8a00e1864715fa59b2",
+    "sha256": "19186d34100200be054c4ae80bb15d0079072c091ec8ae8c7813074024dfbc4d",
     "contentType": "text/html;charset=UTF-8",
     "cached": false,
-    "fetchedAt": "2026-02-28T05:12:50Z"
+    "fetchedAt": "2026-02-28T06:03:44Z"
   },
   {
     "sourceType": "web_public_report_direct",
@@ -292,7 +629,7 @@
     "sha256": "af9cdb7a0ff40bc9015e3bb6431b209cbfa9f70ae78616aa28a2a64ae09cc694",
     "contentType": "application/pdf",
     "cached": false,
-    "fetchedAt": "2026-02-28T05:12:56Z"
+    "fetchedAt": "2026-02-28T06:03:49Z"
   },
   {
     "sourceType": "web_public_report_direct",
@@ -303,58 +640,19 @@
     "sha256": "544e7be45367072084ebf39771050abdf4d7ee9fe64ff28edbc1a5b344563e32",
     "contentType": "application/pdf",
     "cached": false,
-    "fetchedAt": "2026-02-28T05:13:04Z"
+    "fetchedAt": "2026-02-28T06:03:59Z"
   },
   {
     "sourceType": "web_public_report",
     "company": "茶百道",
-    "query": "Chabaidao investor relations report",
-    "url": "https://www1.hkexnews.hk/search/titlesearch.xhtml?market=SEHK&stockId=1000219323&category=0",
-    "path": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\web\\茶百道\\01_01_www1.hkexnews.hk_34c54498ea.html",
-    "size": 116374,
-    "sha256": "8bf7378e211e5bbe6cdc42edcf1b0c7551ef847ac41fe7867896587e073ebad4",
-    "contentType": "text/html;charset=UTF-8",
-    "cached": false,
-    "fetchedAt": "2026-02-28T05:13:06Z"
-  },
-  {
-    "sourceType": "web_public_report_pdf",
-    "company": "茶百道",
-    "query": "Chabaidao investor relations report",
-    "url": "https://www1.hkexnews.hk/listedco/listconews/sehk/2026/0204/2026020401518.pdf",
-    "referrer": "https://www1.hkexnews.hk/search/titlesearch.xhtml?market=SEHK&stockId=1000219323&category=0",
-    "path": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\web\\茶百道\\01_01_01_www1.hkexnews.hk_57dd518b37.pdf",
-    "size": 68891,
-    "sha256": "27ff81878da3a67e36c4a19d9e2d43e81638cf6164cda7627cbbb8dc6e718324",
+    "query": "茶百道 招股书",
+    "url": "https://pdf.dfcfw.com/pdf/H3_AP202404161630268834_1.pdf",
+    "path": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\web\\茶百道\\02_02_pdf.dfcfw.com_c4aa55ca15.pdf",
+    "size": 989,
+    "sha256": "8107cae1fcc4804da13d7036658cad50efa451b54c248e6c12349ba29b7b8b89",
     "contentType": "application/pdf",
     "cached": false,
-    "fetchedAt": "2026-02-28T05:13:06Z"
-  },
-  {
-    "sourceType": "web_public_report_pdf",
-    "company": "茶百道",
-    "query": "Chabaidao investor relations report",
-    "url": "https://www1.hkexnews.hk/listedco/listconews/sehk/2026/0106/2026010600696.pdf",
-    "referrer": "https://www1.hkexnews.hk/search/titlesearch.xhtml?market=SEHK&stockId=1000219323&category=0",
-    "path": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\web\\茶百道\\01_01_02_www1.hkexnews.hk_b689e76a30.pdf",
-    "size": 65724,
-    "sha256": "b7eccffd96c1314803ec7bdb5e6ddcf8fd461a466a8d994092996d028a0957ef",
-    "contentType": "application/pdf",
-    "cached": false,
-    "fetchedAt": "2026-02-28T05:13:07Z"
-  },
-  {
-    "sourceType": "web_public_report_pdf",
-    "company": "茶百道",
-    "query": "Chabaidao investor relations report",
-    "url": "https://www1.hkexnews.hk/listedco/listconews/sehk/2025/1203/2025120300893.pdf",
-    "referrer": "https://www1.hkexnews.hk/search/titlesearch.xhtml?market=SEHK&stockId=1000219323&category=0",
-    "path": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\web\\茶百道\\01_01_03_www1.hkexnews.hk_7bae893817.pdf",
-    "size": 65628,
-    "sha256": "2902a2769e4939b02bf9973a71f00ce811326d3ca7318c157563b812722f8e38",
-    "contentType": "application/pdf",
-    "cached": false,
-    "fetchedAt": "2026-02-28T05:13:07Z"
+    "fetchedAt": "2026-02-28T06:04:02Z"
   },
   {
     "sourceType": "web_public_report_direct",
@@ -365,7 +663,7 @@
     "sha256": "afaa42307eb4d2d8eda8178a6fdde1a8d61fa845c62064389c79186b2d166cec",
     "contentType": "text/html",
     "cached": false,
-    "fetchedAt": "2026-02-28T05:13:10Z"
+    "fetchedAt": "2026-02-28T06:04:04Z"
   },
   {
     "sourceType": "web_public_report_direct",
@@ -376,18 +674,31 @@
     "sha256": "c9014020c0764227e3ca9d18eb3071286392e83037158f8b7cfe05e7ba77ff35",
     "contentType": "application/pdf",
     "cached": false,
-    "fetchedAt": "2026-02-28T05:13:27Z"
+    "fetchedAt": "2026-02-28T06:04:18Z"
   },
   {
-    "sourceType": "web_public_report_direct",
+    "sourceType": "web_public_report",
     "company": "蜜雪冰城",
-    "url": "https://www1.hkexnews.hk/listedco/listconews/sehk/2025/0221/2025022100010_c.pdf",
-    "path": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\web\\蜜雪冰城\\direct_03_www1.hkexnews.hk_1a99b7b0cd.pdf",
-    "size": 23113344,
-    "sha256": "938e1c713281b0dd0d73d2eb254600fb741ab24903d553bacd7672040dae11bc",
+    "query": "Mixue prospectus",
+    "url": "https://statichk.iqdii.com/stockdata/notice/newprospectus/sehk24010203324_c.pdf",
+    "path": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\web\\蜜雪冰城\\01_02_statichk.iqdii.com_8f560f4200.pdf",
+    "size": 18050285,
+    "sha256": "d0fe7ca852bf943ec0d67393331905a66aba5160ff46024b23dcf2b0462e72d2",
     "contentType": "application/pdf",
     "cached": false,
-    "fetchedAt": "2026-02-28T05:13:47Z"
+    "fetchedAt": "2026-02-28T06:04:45Z"
+  },
+  {
+    "sourceType": "web_public_report",
+    "company": "蜜雪冰城",
+    "query": "蜜雪冰城 投资者关系",
+    "url": "https://www1.hkexnews.hk/listedco/listconews/sehk/2025/0326/2025032601257_c.pdf",
+    "path": "E:\\project\\shuju\\chayan_algorithm\\backend\\data\\prepared_reports\\web\\蜜雪冰城\\03_02_www1.hkexnews.hk_23b1b145dd.pdf",
+    "size": 432976,
+    "sha256": "002a8d473922f9c0281c959e25cab295ab445559cfc7fecacc2790eafc7c39a4",
+    "contentType": "application/pdf",
+    "cached": false,
+    "fetchedAt": "2026-02-28T06:04:48Z"
   },
   {
     "sourceType": "web_public_report_direct",
@@ -398,6 +709,6 @@
     "sha256": "19eae23420a5a9af8400bbc2dc78704dc0a770c311ef70dfa4e809672cb48c54",
     "contentType": "text/html; charset=UTF-8",
     "cached": false,
-    "fetchedAt": "2026-02-28T05:14:15Z"
+    "fetchedAt": "2026-02-28T06:05:22Z"
   }
 ]

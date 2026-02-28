@@ -1,7 +1,11 @@
 {
-  "generatedAt": "2026-02-28T05:14:17Z",
-  "totalRecords": 33,
-  "secFilings": 6,
+  "generatedAt": "2026-02-28T06:05:31Z",
+  "totalRecords": 56,
+  "secFilings": 24,
   "secCompanyfacts": 6,
-  "webReports": 19
+  "universeRecords": 4,
+  "secUniverseCount": 10412,
+  "sseUniverseCount": 2309,
+  "szseUniverseCount": 3071,
+  "webReports": 22
 }

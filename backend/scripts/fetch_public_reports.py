@@ -18,7 +18,7 @@ import sys
 import time
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
-from urllib.parse import quote_plus, unquote, urlparse
+from urllib.parse import quote_plus, unquote, urlencode, urlparse
 from urllib.request import Request, urlopen
 
 
@@ -27,6 +27,11 @@ SEC_SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
 SEC_COMPANYFACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
 SEC_ARCHIVE_DOC_URL = "https://www.sec.gov/Archives/edgar/data/{cik_nozero}/{accession_no_dash}/{doc}"
 DUCKDUCKGO_HTML_URL = "https://duckduckgo.com/html/?q={query}"
+SSE_A_SHARE_LIST_URL = "http://query.sse.com.cn/security/stock/getStockListData2.do"
+SSE_A_SHARE_REFERER = "https://www.sse.com.cn/assortment/stock/list/share/"
+SZSE_REPORT_DATA_URL = "https://www.szse.cn/api/report/ShowReport/data"
+SZSE_STOCK_LIST_REFERER = "https://www.szse.cn/market/product/stock/list/index.html"
+CNINFO_STOCK_LIST_URL = "http://www.cninfo.com.cn/new/data/szse_stock.json"
 
 ALLOWED_SEC_FORMS = {"10-K", "10-Q", "20-F", "6-K"}
 DEFAULT_USER_AGENT = "Mozilla/5.0"
@@ -109,8 +114,14 @@ def request_url(
     timeout: int,
     user_agent: str,
     accept: str = "*/*",
+    extra_headers: Optional[Dict[str, str]] = None,
 ) -> Tuple[int, Dict[str, str], bytes]:
-    req = Request(url, headers={"User-Agent": user_agent, "Accept": accept})
+    headers = {"User-Agent": user_agent, "Accept": accept}
+    if extra_headers:
+        for k, v in extra_headers.items():
+            if k and v is not None:
+                headers[k] = str(v)
+    req = Request(url, headers=headers)
     with urlopen(req, timeout=timeout) as resp:
         status = int(getattr(resp, "status", 200))
         headers = {k.lower(): v for k, v in resp.headers.items()}
@@ -118,17 +129,46 @@ def request_url(
         return status, headers, body
 
 
-def fetch_json(url: str, *, timeout: int, user_agent: str, retries: int = 2) -> Optional[dict]:
+def fetch_json(
+    url: str,
+    *,
+    timeout: int,
+    user_agent: str,
+    retries: int = 2,
+    extra_headers: Optional[Dict[str, str]] = None,
+) -> Optional[dict]:
     for attempt in range(max(0, retries) + 1):
         try:
-            status, _, body = request_url(
-                url, timeout=timeout, user_agent=user_agent, accept="application/json,text/plain,*/*"
+            status, headers, body = request_url(
+                url,
+                timeout=timeout,
+                user_agent=user_agent,
+                accept="application/json,text/plain,*/*",
+                extra_headers=extra_headers,
             )
             if status >= 400:
                 if attempt < retries:
                     time.sleep(1.0 + attempt * 0.6)
                     continue
                 return None
+            content_type = str(headers.get("content-type") or "")
+            enc_match = re.search(r"charset=([a-zA-Z0-9\-_]+)", content_type, flags=re.IGNORECASE)
+            candidates: List[str] = []
+            if enc_match:
+                candidates.append(enc_match.group(1).strip())
+            candidates.extend(["utf-8", "gbk", "gb18030"])
+            seen = set()
+            for enc in candidates:
+                if not enc:
+                    continue
+                enc_key = enc.lower()
+                if enc_key in seen:
+                    continue
+                seen.add(enc_key)
+                try:
+                    return json.loads(body.decode(enc, errors="strict"))
+                except Exception:
+                    continue
             return json.loads(body.decode("utf-8", errors="ignore"))
         except Exception:
             if attempt < retries:
@@ -223,6 +263,115 @@ def is_high_confidence_report_link(url: str) -> bool:
     if any(token in path for token in ("/investor", "/investors", "/financial-report", "/financial-reports", "/annual-report")):
         return True
     return False
+
+
+def strip_html(text: str) -> str:
+    value = re.sub(r"<[^>]+>", "", text or "")
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def is_a_share_category(category: str) -> bool:
+    text = str(category or "").upper().replace(" ", "")
+    if not text:
+        return False
+    if "B" in text and "A" not in text and "Ａ" not in text:
+        return False
+    return ("A" in text) or ("Ａ" in text)
+
+
+def detect_cn_a_share_exchange(code: str, org_id: str) -> str:
+    stock_code = str(code or "").strip()
+    org = str(org_id or "").strip().lower()
+    if stock_code.startswith(("600", "601", "603", "605", "688", "689")):
+        return "SSE"
+    if stock_code.startswith(("000", "001", "002", "003", "300", "301")):
+        return "SZSE"
+    if stock_code.startswith(("430", "83", "87", "88", "92")):
+        return "BSE"
+    if org.startswith("gssh"):
+        return "SSE"
+    if org.startswith("gssz"):
+        return "SZSE"
+    if org.startswith("gfbj"):
+        return "BSE"
+    return "UNKNOWN"
+
+
+def export_szse_universe_from_cninfo(output_dir: Path, *, timeout: int, user_agent: str) -> List[dict]:
+    universe_dir = output_dir / "universe"
+    ensure_dir(universe_dir)
+    payload = fetch_json(CNINFO_STOCK_LIST_URL, timeout=timeout, user_agent=user_agent, retries=3)
+    if not isinstance(payload, dict):
+        return []
+    stock_list = payload.get("stockList") or []
+    if not isinstance(stock_list, list) or not stock_list:
+        return []
+
+    normalized = []
+    raw_rows = []
+    seen_codes = set()
+    for row in stock_list:
+        if not isinstance(row, dict):
+            continue
+        code = str(row.get("code") or "").strip()
+        if not re.fullmatch(r"\d{6}", code):
+            continue
+        category = str(row.get("category") or "").strip()
+        if not is_a_share_category(category):
+            continue
+        exchange = detect_cn_a_share_exchange(code, str(row.get("orgId") or ""))
+        if exchange != "SZSE":
+            continue
+        if code in seen_codes:
+            continue
+        seen_codes.add(code)
+        raw_rows.append(row)
+        normalized.append(
+            {
+                "exchange": "SZSE",
+                "ticker": code,
+                "companyName": str(row.get("zwjc") or "").strip(),
+                "category": category,
+                "orgId": str(row.get("orgId") or "").strip(),
+                "source": "CNINFO",
+            }
+        )
+
+    if not normalized:
+        return []
+
+    raw_payload = {
+        "exchange": "SZSE",
+        "source": "CNINFO fallback",
+        "sourceUrl": CNINFO_STOCK_LIST_URL,
+        "recordCount": len(raw_rows),
+        "companyCount": len(normalized),
+        "fetchedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "records": raw_rows,
+    }
+    raw_path = universe_dir / "szse_a_share_list.json"
+    raw_bytes = json.dumps(raw_payload, ensure_ascii=False, indent=2).encode("utf-8")
+    write_file(raw_path, raw_bytes)
+
+    normalized_path = universe_dir / "szse_a_share_list.normalized.jsonl"
+    with normalized_path.open("w", encoding="utf-8") as f:
+        for row in normalized:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+    return [
+        {
+            "sourceType": "szse_universe",
+            "url": CNINFO_STOCK_LIST_URL,
+            "path": str(raw_path),
+            "size": len(raw_bytes),
+            "sha256": file_sha256(raw_bytes),
+            "contentType": "application/json",
+            "companyCount": len(normalized),
+            "normalizedPath": str(normalized_path),
+            "fallback": True,
+            "fetchedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
+    ]
 
 
 def search_report_links(query: str, *, timeout: int, user_agent: str, limit: int) -> List[str]:
@@ -640,6 +789,16 @@ def save_index(output_dir: Path, records: List[dict]) -> None:
         "totalRecords": len(records),
         "secFilings": sum(1 for row in records if row.get("sourceType") == "sec_filing"),
         "secCompanyfacts": sum(1 for row in records if row.get("sourceType") == "sec_companyfacts"),
+        "universeRecords": sum(1 for row in records if str(row.get("sourceType", "")).endswith("_universe")),
+        "secUniverseCount": sum(
+            int(row.get("companyCount") or 0) for row in records if row.get("sourceType") == "sec_universe"
+        ),
+        "sseUniverseCount": sum(
+            int(row.get("companyCount") or 0) for row in records if row.get("sourceType") == "sse_universe"
+        ),
+        "szseUniverseCount": sum(
+            int(row.get("companyCount") or 0) for row in records if row.get("sourceType") == "szse_universe"
+        ),
         "webReports": sum(
             1
             for row in records
@@ -720,6 +879,295 @@ def export_hkex_universe(output_dir: Path, *, timeout: int, user_agent: str, max
     }]
 
 
+def export_sse_universe(output_dir: Path, *, timeout: int, user_agent: str) -> List[dict]:
+    universe_dir = output_dir / "universe"
+    ensure_dir(universe_dir)
+    page_size = 200
+    page_no = 1
+    all_rows: List[dict] = []
+    expected_total = 0
+    page_count = 0
+    extra_headers = {
+        "Referer": SSE_A_SHARE_REFERER,
+        "Host": "query.sse.com.cn",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+    }
+
+    while True:
+        params = {
+            "isPagination": "true",
+            "stockCode": "",
+            "csrcCode": "",
+            "areaName": "",
+            "stockType": "10",  # SSE all A-shares
+            "pageHelp.pageSize": str(page_size),
+            "pageHelp.pageNo": str(page_no),
+            "pageHelp.beginPage": str(page_no),
+            "pageHelp.endPage": str(page_no),
+            "pageHelp.cacheSize": "1",
+            "pageHelp.pageCount": "1",
+        }
+        url = f"{SSE_A_SHARE_LIST_URL}?{urlencode(params)}"
+        payload = fetch_json(
+            url,
+            timeout=timeout,
+            user_agent=user_agent,
+            retries=2,
+            extra_headers=extra_headers,
+        )
+        if not payload:
+            break
+
+        page_help = payload.get("pageHelp") or {}
+        data_rows = page_help.get("data") or []
+        if not isinstance(data_rows, list) or not data_rows:
+            break
+        all_rows.extend(data_rows)
+
+        try:
+            expected_total = int(page_help.get("total") or expected_total or 0)
+        except Exception:
+            expected_total = expected_total or 0
+        try:
+            page_count = int(page_help.get("pageCount") or page_count or 0)
+        except Exception:
+            page_count = page_count or 0
+
+        if page_count and page_no >= page_count:
+            break
+        if expected_total and len(all_rows) >= expected_total:
+            break
+        page_no += 1
+        if page_no > 1000:
+            break
+
+    if not all_rows:
+        return []
+
+    normalized = []
+    seen_codes = set()
+    for row in all_rows:
+        if not isinstance(row, dict):
+            continue
+        code = str(row.get("SECURITY_CODE_A") or "").strip()
+        if not re.fullmatch(r"\d{6}", code):
+            continue
+        if code in seen_codes:
+            continue
+        seen_codes.add(code)
+        normalized.append(
+            {
+                "exchange": "SSE",
+                "ticker": code,
+                "companyName": str(row.get("COMPANY_ABBR") or row.get("SECURITY_ABBR_A") or "").strip(),
+                "securityAbbrA": str(row.get("SECURITY_ABBR_A") or "").strip(),
+                "companyCode": str(row.get("COMPANY_CODE") or "").strip(),
+                "listingDate": str(row.get("LISTING_DATE") or "").strip(),
+                "listingBoard": str(row.get("LISTING_BOARD") or "").strip(),
+            }
+        )
+
+    raw_payload = {
+        "exchange": "SSE",
+        "sourceUrl": SSE_A_SHARE_LIST_URL,
+        "stockType": "10",
+        "recordCount": len(all_rows),
+        "companyCount": len(normalized),
+        "fetchedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "records": all_rows,
+    }
+    raw_path = universe_dir / "sse_a_share_list.json"
+    raw_bytes = json.dumps(raw_payload, ensure_ascii=False, indent=2).encode("utf-8")
+    write_file(raw_path, raw_bytes)
+
+    normalized_path = universe_dir / "sse_a_share_list.normalized.jsonl"
+    with normalized_path.open("w", encoding="utf-8") as f:
+        for row in normalized:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+    return [
+        {
+            "sourceType": "sse_universe",
+            "url": SSE_A_SHARE_LIST_URL,
+            "path": str(raw_path),
+            "size": len(raw_bytes),
+            "sha256": file_sha256(raw_bytes),
+            "contentType": "application/json",
+            "companyCount": len(normalized),
+            "normalizedPath": str(normalized_path),
+            "fetchedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
+    ]
+
+
+def export_szse_universe(output_dir: Path, *, timeout: int, user_agent: str) -> List[dict]:
+    universe_dir = output_dir / "universe"
+    ensure_dir(universe_dir)
+    page_size = 20
+    extra_headers = {
+        "Referer": SZSE_STOCK_LIST_REFERER,
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+    }
+
+    boot_url = f"{SZSE_REPORT_DATA_URL}?{urlencode({'SHOWTYPE': 'JSON', 'CATALOGID': '1110'})}"
+    boot = fetch_json(
+        boot_url,
+        timeout=timeout,
+        user_agent=user_agent,
+        retries=2,
+        extra_headers=extra_headers,
+    )
+    if not isinstance(boot, list) or not boot:
+        return export_szse_universe_from_cninfo(output_dir, timeout=timeout, user_agent=user_agent)
+
+    tab_keys: List[str] = []
+    for item in boot:
+        if not isinstance(item, dict):
+            continue
+        meta = item.get("metadata") or {}
+        tabkey = str(meta.get("tabkey") or "").strip()
+        rows = item.get("data") or []
+        if not tabkey:
+            continue
+        if isinstance(rows, list) and rows and isinstance(rows[0], dict) and "agdm" in rows[0]:
+            tab_keys.append(tabkey)
+
+    if not tab_keys:
+        first_tab = str(((boot[0] or {}).get("metadata") or {}).get("tabkey") or "tab1").strip()
+        tab_keys = [first_tab] if first_tab else ["tab1"]
+
+    all_rows: List[dict] = []
+    tab_meta: Dict[str, dict] = {}
+    for tabkey in tab_keys:
+        page_no = 1
+        page_count = 0
+        consecutive_failures = 0
+        while True:
+            params = {
+                "SHOWTYPE": "JSON",
+                "CATALOGID": "1110",
+                "TABKEY": tabkey,
+                "PAGENO": str(page_no),
+                f"{tabkey}PAGESIZE": str(page_size),
+            }
+            url = f"{SZSE_REPORT_DATA_URL}?{urlencode(params)}"
+            page = fetch_json(
+                url,
+                timeout=timeout,
+                user_agent=user_agent,
+                retries=4,
+                extra_headers=extra_headers,
+            )
+            if not isinstance(page, list) or not page:
+                consecutive_failures += 1
+                if consecutive_failures >= 8:
+                    break
+                time.sleep(min(3.0, 0.4 * consecutive_failures))
+                continue
+            consecutive_failures = 0
+
+            current = None
+            for item in page:
+                if not isinstance(item, dict):
+                    continue
+                if str((item.get("metadata") or {}).get("tabkey") or "").strip() == tabkey:
+                    current = item
+                    break
+            if current is None:
+                current = page[0]
+
+            meta = current.get("metadata") or {}
+            tab_meta[tabkey] = {
+                "name": str(meta.get("name") or "").strip(),
+                "recordCount": int(meta.get("recordcount") or 0) if str(meta.get("recordcount") or "").isdigit() else 0,
+                "pageCount": int(meta.get("pagecount") or 0) if str(meta.get("pagecount") or "").isdigit() else 0,
+            }
+            data_rows = current.get("data") or []
+            if not isinstance(data_rows, list):
+                consecutive_failures += 1
+                if consecutive_failures >= 8:
+                    break
+                time.sleep(min(3.0, 0.4 * consecutive_failures))
+                continue
+            if not data_rows and page_count and page_no <= page_count:
+                consecutive_failures += 1
+                if consecutive_failures >= 8:
+                    break
+                time.sleep(min(3.0, 0.4 * consecutive_failures))
+                continue
+            if not data_rows:
+                break
+            all_rows.extend(data_rows)
+
+            current_page_count = tab_meta[tabkey]["pageCount"]
+            if current_page_count:
+                page_count = current_page_count
+            if page_count and page_no >= page_count:
+                break
+            page_no += 1
+            time.sleep(0.05)
+            if page_no > 2000:
+                break
+
+    if not all_rows:
+        return export_szse_universe_from_cninfo(output_dir, timeout=timeout, user_agent=user_agent)
+
+    normalized = []
+    seen_codes = set()
+    for row in all_rows:
+        if not isinstance(row, dict):
+            continue
+        code = str(row.get("agdm") or "").strip()
+        if not re.fullmatch(r"\d{6}", code):
+            continue
+        if code in seen_codes:
+            continue
+        seen_codes.add(code)
+        normalized.append(
+            {
+                "exchange": "SZSE",
+                "ticker": code,
+                "companyName": strip_html(str(row.get("agjc") or "")),
+                "listingDate": str(row.get("agssrq") or "").strip(),
+                "board": str(row.get("bk") or "").strip(),
+                "industry": str(row.get("sshymc") or "").strip(),
+            }
+        )
+
+    raw_payload = {
+        "exchange": "SZSE",
+        "sourceUrl": SZSE_REPORT_DATA_URL,
+        "catalogId": "1110",
+        "tabMeta": tab_meta,
+        "recordCount": len(all_rows),
+        "companyCount": len(normalized),
+        "fetchedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "records": all_rows,
+    }
+    raw_path = universe_dir / "szse_a_share_list.json"
+    raw_bytes = json.dumps(raw_payload, ensure_ascii=False, indent=2).encode("utf-8")
+    write_file(raw_path, raw_bytes)
+
+    normalized_path = universe_dir / "szse_a_share_list.normalized.jsonl"
+    with normalized_path.open("w", encoding="utf-8") as f:
+        for row in normalized:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+    return [
+        {
+            "sourceType": "szse_universe",
+            "url": SZSE_REPORT_DATA_URL,
+            "path": str(raw_path),
+            "size": len(raw_bytes),
+            "sha256": file_sha256(raw_bytes),
+            "contentType": "application/json",
+            "companyCount": len(normalized),
+            "normalizedPath": str(normalized_path),
+            "fetchedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
+    ]
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Fetch public financial reports for preload dataset.")
     script_dir = Path(__file__).resolve().parent
@@ -736,6 +1184,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sec-user-agent", type=str, default=DEFAULT_SEC_USER_AGENT, help="HTTP User-Agent for SEC APIs")
     parser.add_argument("--export-sec-universe", action="store_true", help="Export full SEC company universe")
     parser.add_argument("--export-hkex-universe", action="store_true", help="Export HKEX securities universe file")
+    parser.add_argument("--export-sse-universe", action="store_true", help="Export SSE A-share universe")
+    parser.add_argument("--export-szse-universe", action="store_true", help="Export SZSE A-share universe")
     parser.add_argument("--clean-output", action="store_true", help="Remove existing output directory before fetching")
     return parser.parse_args()
 
@@ -773,6 +1223,24 @@ def main() -> int:
                 timeout=args.timeout,
                 user_agent=args.user_agent,
                 max_file_mb=max(5, args.max_file_mb),
+            )
+        )
+
+    if args.export_sse_universe:
+        records.extend(
+            export_sse_universe(
+                output_dir,
+                timeout=args.timeout,
+                user_agent=args.user_agent,
+            )
+        )
+
+    if args.export_szse_universe:
+        records.extend(
+            export_szse_universe(
+                output_dir,
+                timeout=args.timeout,
+                user_agent=args.user_agent,
             )
         )
 
