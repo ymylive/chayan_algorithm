@@ -323,8 +323,58 @@
       title: '智能研究分析工作台',
       subtitle: '在同一入口完成快速 AI 分析与深度研究，任务与历史结果统一管理。',
       tabs: {
+        integrated: 'AI深度研究分析',
         analyze: 'AI 分析',
         research: '深度研究'
+      }
+    },
+    integrated: {
+      title: 'AI深度研究分析',
+      subtitle: '先深度研究获取证据，再自动进入 AI 结构化分析，一次任务贯通两阶段。',
+      form: {
+        topic: '研究主题',
+        topicPlaceholder: '例如：茶饮行业竞争格局与茶颜悦色增长路径',
+        target: '分析对象',
+        targetPlaceholder: '例如：茶颜悦色（留空则默认使用研究主题）',
+        start: '开始深度研究分析'
+      },
+      steps: {
+        research: '深度研究',
+        evidence: '证据提取',
+        analyze: 'AI分析',
+        deliver: '结构化交付'
+      },
+      current: {
+        title: '当前一体化任务',
+        researchPhase: '阶段1：深度研究',
+        analyzePhase: '阶段2：AI分析'
+      },
+      actions: {
+        openResearch: '查看研究详情',
+        openAnalyze: '查看分析详情'
+      },
+      history: {
+        title: '一体化任务历史',
+        refresh: '刷新状态',
+        empty: '暂无一体化任务记录',
+        topic: '主题',
+        target: '对象',
+        status: '状态',
+        progress: '进度',
+        updatedAt: '更新时间',
+        actions: '操作',
+        restore: '恢复任务'
+      },
+      toasts: {
+        topicRequired: '请先填写研究主题',
+        started: '已启动深度研究分析任务',
+        completed: '深度研究分析任务已完成',
+        pollFailed: '刷新一体化任务状态失败',
+        researchStartFailed: '启动深度研究失败',
+        researchFailed: '深度研究阶段失败',
+        analyzeStarted: '深度研究完成，已自动启动 AI 分析',
+        analyzeStartFailed: '自动启动 AI 分析失败',
+        analyzeFailed: 'AI 分析阶段失败'
       }
     },
     header: {

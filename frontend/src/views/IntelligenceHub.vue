@@ -6,6 +6,7 @@
         <p class="hub-subtitle">{{ t('aiAnalyze.unified.subtitle') }}</p>
       </div>
       <el-tabs v-model="activeTab" class="hub-tabs" stretch>
+        <el-tab-pane :label="t('aiAnalyze.unified.tabs.integrated')" name="integrated" />
         <el-tab-pane :label="t('aiAnalyze.unified.tabs.analyze')" name="analyze" />
         <el-tab-pane :label="t('aiAnalyze.unified.tabs.research')" name="research" />
       </el-tabs>
@@ -24,8 +25,7 @@ import { KeepAlive, computed, defineAsyncComponent, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 
-type HubTab = 'analyze' | 'research'
-
+const IntegratedDeepAnalyzeView = defineAsyncComponent(() => import('./IntegratedDeepAnalyze.vue'))
 const AIAnalyzeView = defineAsyncComponent(() => import('./AIAnalyze.vue'))
 const DeepResearchView = defineAsyncComponent(() => import('./DeepResearch.vue'))
 
@@ -33,10 +33,13 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 
+type HubTab = 'integrated' | 'analyze' | 'research'
+
 const normalizeTab = (raw: unknown): HubTab => {
   const value = String(raw || '').trim().toLowerCase()
   if (value === 'research' || route.path === '/deep-research') return 'research'
-  return 'analyze'
+  if (value === 'analyze') return 'analyze'
+  return 'integrated'
 }
 
 const activeTab = ref<HubTab>(normalizeTab(route.query.tab))
@@ -63,7 +66,11 @@ watch(activeTab, (tab) => {
   })
 })
 
-const activeView = computed(() => (activeTab.value === 'research' ? DeepResearchView : AIAnalyzeView))
+const activeView = computed(() => {
+  if (activeTab.value === 'research') return DeepResearchView
+  if (activeTab.value === 'analyze') return AIAnalyzeView
+  return IntegratedDeepAnalyzeView
+})
 </script>
 
 <style scoped>

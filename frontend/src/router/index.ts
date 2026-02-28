@@ -41,7 +41,7 @@ const router = createRouter({
     { path: '/recommendations', component: () => import('../views/Recommendations.vue'), meta: { requiresAuth: true, titleKey: 'nav.recommendations' } },
     { path: '/ai-analyze', component: () => import('../views/IntelligenceHub.vue'), meta: { requiresAuth: true, titleKey: 'nav.aiAnalyze' } },
     { path: '/ai-settings', component: () => import('../views/AISettings.vue'), meta: { requiresAuth: true, titleKey: 'nav.aiSettings' } },
-    { path: '/deep-research', redirect: '/ai-analyze?tab=research', meta: { requiresAuth: true, titleKey: 'nav.aiAnalyze' } }
+    { path: '/deep-research', redirect: '/ai-analyze?tab=integrated', meta: { requiresAuth: true, titleKey: 'nav.aiAnalyze' } }
   ]
 })
 

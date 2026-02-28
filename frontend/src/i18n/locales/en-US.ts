@@ -323,8 +323,58 @@ export default {
       title: 'Research & Analysis Workspace',
       subtitle: 'Run AI analysis and deep research in one workspace with shared task and history flow.',
       tabs: {
+        integrated: 'AI Deep Research Analysis',
         analyze: 'AI Analyze',
         research: 'Deep Research'
+      }
+    },
+    integrated: {
+      title: 'AI Deep Research Analysis',
+      subtitle: 'Run deep research first for evidence, then automatically continue with structured AI analysis.',
+      form: {
+        topic: 'Research Topic',
+        topicPlaceholder: 'Example: Tea beverage competitive landscape and growth path of ChaYanYueSe',
+        target: 'Analysis Target',
+        targetPlaceholder: 'Example: ChaYanYueSe (defaults to topic if empty)',
+        start: 'Start Deep Research Analysis'
+      },
+      steps: {
+        research: 'Deep Research',
+        evidence: 'Evidence Extraction',
+        analyze: 'AI Analyze',
+        deliver: 'Structured Delivery'
+      },
+      current: {
+        title: 'Current Unified Task',
+        researchPhase: 'Phase 1: Deep Research',
+        analyzePhase: 'Phase 2: AI Analyze'
+      },
+      actions: {
+        openResearch: 'Open Research Details',
+        openAnalyze: 'Open Analysis Details'
+      },
+      history: {
+        title: 'Unified Task History',
+        refresh: 'Refresh',
+        empty: 'No unified task history',
+        topic: 'Topic',
+        target: 'Target',
+        status: 'Status',
+        progress: 'Progress',
+        updatedAt: 'Updated At',
+        actions: 'Actions',
+        restore: 'Restore'
+      },
+      toasts: {
+        topicRequired: 'Please enter a research topic first',
+        started: 'Deep research analysis task started',
+        completed: 'Deep research analysis task completed',
+        pollFailed: 'Failed to refresh unified task status',
+        researchStartFailed: 'Failed to start deep research',
+        researchFailed: 'Deep research phase failed',
+        analyzeStarted: 'Deep research completed, AI analysis started automatically',
+        analyzeStartFailed: 'Failed to auto-start AI analysis',
+        analyzeFailed: 'AI analysis phase failed'
       }
     },
     header: {
