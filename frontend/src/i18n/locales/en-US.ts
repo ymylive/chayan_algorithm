@@ -211,49 +211,64 @@ export default {
   },
   deepResearch: {
     header: {
-      title: 'Deep Research',
-      subtitle: 'Search, fetch, and analyze market and competitor intelligence in real time'
+      title: 'Deep Research & Analysis',
+      subtitle: 'Run research and analysis as one task pipeline with real-time progress and history tracking'
     },
     form: {
-      topicLabel: 'Research Topic',
-      topicPlaceholder: 'Example: New energy vehicle market',
-      startButton: 'Start Research'
+      topicLabel: 'Task Topic',
+      topicPlaceholder: 'Example: New energy vehicle competitive landscape and strategy suggestions',
+      startButton: 'Start Task'
     },
-    result: {
-      title: 'Research Result'
+    common: {
+      refresh: 'Refresh'
     },
-    section: {
-      marketData: 'Market Data',
-      competitors: 'Competitors',
-      sources: 'Sources'
+    running: {
+      title: 'Current Running Tasks',
+      empty: 'No running tasks',
+      topicFallback: 'Untitled topic'
     },
-    table: {
-      name: 'Name',
-      relevance: 'Relevance',
-      source: 'Source'
+    current: {
+      title: 'Current Task View',
+      topic: 'Topic'
     },
     history: {
-      title: 'History',
+      title: 'History Tasks',
+      empty: 'No history tasks',
       topic: 'Topic',
-      time: 'Time',
-      status: 'Status'
+      status: 'Status',
+      progress: 'Progress',
+      updatedAt: 'Updated At',
+      action: 'Action',
+      viewResult: 'View Result'
+    },
+    result: {
+      title: 'Task Result Detail',
+      researchSummary: 'Research Summary',
+      sources: 'Research Sources',
+      analysisNarrative: 'Analysis Narrative',
+      keyFindings: 'Key Findings',
+      suggestions: 'Suggestions'
     },
     status: {
       searching: 'Searching',
       fetching: 'Fetching',
       analyzing: 'Analyzing',
+      pending: 'Pending',
+      running: 'Running',
       completed: 'Completed',
-      pending: 'Pending'
-    },
-    progress: {
-      fetched: 'Fetched {fetched}/{total}'
+      failed: 'Failed',
+      unknown: 'Unknown'
     },
     message: {
-      researchFailed: 'Research failed',
-      wsError: 'WebSocket connection error',
-      topicRequired: 'Please enter a research topic',
-      started: 'Research started',
-      startFailed: 'Failed to start research'
+      topicRequired: 'Please enter a task topic',
+      submitSuccess: 'Task submitted and started',
+      submitFailed: 'Failed to submit task',
+      pollFailed: 'Failed to fetch task progress',
+      loadJobsFailed: 'Failed to fetch task list',
+      loadResultFailed: 'Failed to fetch task result',
+      completed: 'Task completed',
+      failed: 'Task failed',
+      restored: 'Resumed your previous task and restarted tracking'
     }
   },
   analysisPage: {

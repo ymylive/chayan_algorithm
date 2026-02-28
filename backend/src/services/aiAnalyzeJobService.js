@@ -19,6 +19,24 @@ const normalizeProgress = (value, fallback = 0) => {
   return Math.min(100, Math.max(0, Math.round(numeric)));
 };
 
+const parseRequestPayload = (value) => {
+  if (value && typeof value === 'object') return value;
+  if (typeof value !== 'string') return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const normalizePipeline = (value) => String(value || '').trim().slice(0, 80);
+
+const resolvePipeline = (row = {}) => {
+  const requestPayload = parseRequestPayload(row.request_payload);
+  return normalizePipeline(row.pipeline || requestPayload.pipeline || '');
+};
+
 const resolveTraceMessage = (entry = {}) => {
   if (entry.message && typeof entry.message === 'string') return entry.message;
   if (entry.error && typeof entry.error === 'string') return entry.error;
@@ -39,6 +57,7 @@ class AiAnalyzeJobService {
       jobId: row.id,
       userId: row.user_id,
       target: row.target,
+      pipeline: resolvePipeline(row),
       status: row.status,
       progress: normalizeProgress(row.progress, 0),
       workflowStep: row.workflow_step || '',
@@ -50,8 +69,13 @@ class AiAnalyzeJobService {
     };
   }
 
-  async createJob({ userId, target, requestPayload = {} }) {
+  async createJob({ userId, target, pipeline = '', requestPayload = {} }) {
     const jobId = randomUUID();
+    const normalizedPipeline = normalizePipeline(pipeline);
+    const normalizedRequestPayload = {
+      ...(requestPayload && typeof requestPayload === 'object' ? requestPayload : {}),
+      ...(normalizedPipeline ? { pipeline: normalizedPipeline } : {})
+    };
     const traceEntry = [{
       step: 'queued',
       status: 'queued',
@@ -65,7 +89,7 @@ class AiAnalyzeJobService {
         (id, user_id, target, status, progress, workflow_step, workflow_trace, request_payload)
        VALUES ($1, $2, $3, 'queued', 0, 'queued', $4::jsonb, $5::jsonb)
        RETURNING *`,
-      [jobId, userId || null, target, JSON.stringify(traceEntry), JSON.stringify(requestPayload || {})]
+      [jobId, userId || null, target, JSON.stringify(traceEntry), JSON.stringify(normalizedRequestPayload)]
     );
 
     return result.rows[0];
@@ -165,22 +189,32 @@ class AiAnalyzeJobService {
     return result.rows[0] || null;
   }
 
-  async getJob(jobId, { userId = null, isAdmin = false } = {}) {
+  async getJob(jobId, { userId = null, isAdmin = false, pipeline = '' } = {}) {
     const normalizedId = String(jobId || '').trim();
     if (!normalizedId) return null;
+    const normalizedPipeline = normalizePipeline(pipeline);
 
-    const query = isAdmin
-      ? 'SELECT * FROM ai_analysis_jobs WHERE id = $1'
-      : 'SELECT * FROM ai_analysis_jobs WHERE id = $1 AND user_id = $2';
-    const params = isAdmin ? [normalizedId] : [normalizedId, userId];
+    const where = ['id = $1'];
+    const params = [normalizedId];
+    if (!isAdmin) {
+      where.push(`user_id = $${params.length + 1}`);
+      params.push(userId);
+    }
+    if (normalizedPipeline) {
+      where.push(`COALESCE(request_payload->>'pipeline', '') = $${params.length + 1}`);
+      params.push(normalizedPipeline);
+    }
+
+    const query = `SELECT * FROM ai_analysis_jobs WHERE ${where.join(' AND ')}`;
     const result = await pool.query(query, params);
     return result.rows[0] || null;
   }
 
-  async listJobs({ userId = null, isAdmin = false, limit = 20, offset = 0, status = '' } = {}) {
+  async listJobs({ userId = null, isAdmin = false, limit = 20, offset = 0, status = '', pipeline = '' } = {}) {
     const normalizedLimit = Math.min(Math.max(Number(limit) || 20, 1), 100);
     const normalizedOffset = Math.max(Number(offset) || 0, 0);
     const normalizedStatus = String(status || '').trim().toLowerCase();
+    const normalizedPipeline = normalizePipeline(pipeline);
 
     const where = [];
     const params = [];
@@ -193,6 +227,10 @@ class AiAnalyzeJobService {
     if (normalizedStatus) {
       where.push(`status = $${params.length + 1}`);
       params.push(normalizedStatus);
+    }
+    if (normalizedPipeline) {
+      where.push(`COALESCE(request_payload->>'pipeline', '') = $${params.length + 1}`);
+      params.push(normalizedPipeline);
     }
 
     params.push(normalizedLimit, normalizedOffset);

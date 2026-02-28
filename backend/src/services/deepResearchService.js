@@ -9,46 +9,74 @@ class DeepResearchService {
     this.mcpClient = new MCPClient();
   }
 
+  async emitProgress(callback, payload) {
+    if (typeof callback !== 'function') return;
+    try {
+      await Promise.resolve(callback(payload));
+    } catch (err) {
+      logger.warn('Deep research progress callback failed', { error: err?.message || String(err) });
+    }
+  }
+
+  parseToolPayload(result) {
+    const text = result?.content?.[0]?.text;
+    if (typeof text !== 'string') {
+      return result && typeof result === 'object' ? result : {};
+    }
+
+    try {
+      const parsed = JSON.parse(text);
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
   async conductResearch(topic, options = {}) {
-    const maxUrls = options.maxUrls || 10;
-    const maxRetries = options.maxRetries || 2;
+    const maxUrls = Math.max(1, Math.min(Number(options.maxUrls) || 10, 20));
+    const maxRetries = Math.max(1, Math.min(Number(options.maxRetries) || 2, 5));
     const progressCallback = options.onProgress || (() => {});
 
     logger.info('Starting deep research', { topic, maxUrls });
 
     try {
-      progressCallback({ stage: 'search', progress: 0, message: 'Searching for information...' });
+      await this.emitProgress(progressCallback, { stage: 'search', progress: 0, message: 'Searching for information...' });
 
       // Step 1: Search for information
       const searchResults = await this.searchTopic(topic);
       logger.info('Search completed', { resultCount: searchResults.length });
-      progressCallback({ stage: 'search', progress: 25, message: `Found ${searchResults.length} sources` });
+      await this.emitProgress(progressCallback, { stage: 'search', progress: 25, message: `Found ${searchResults.length} sources` });
 
       // Step 2: Fetch full content from URLs
-      progressCallback({ stage: 'fetch', progress: 25, message: 'Fetching content...' });
+      await this.emitProgress(progressCallback, { stage: 'fetch', progress: 25, message: 'Fetching content...' });
       const fetchedContent = await this.fetchAllContent(searchResults, maxUrls, maxRetries, (current, total) => {
-        const fetchProgress = 25 + Math.floor((current / total) * 50);
-        progressCallback({ stage: 'fetch', progress: fetchProgress, message: `Fetched ${current}/${total} pages` });
+        const safeTotal = Math.max(Number(total) || 0, 1);
+        const fetchProgress = 25 + Math.floor((current / safeTotal) * 50);
+        return this.emitProgress(progressCallback, {
+          stage: 'fetch',
+          progress: Math.max(25, Math.min(75, fetchProgress)),
+          message: `Fetched ${current}/${total} pages`
+        });
       });
-      logger.info('Content fetching completed', { successCount: fetchedContent.filter(c => c.success).length });
+      logger.info('Content fetching completed', { successCount: fetchedContent.filter((c) => c.success).length });
 
       // Step 3: Analyze and generate report
-      progressCallback({ stage: 'analyze', progress: 75, message: 'Analyzing content...' });
+      await this.emitProgress(progressCallback, { stage: 'analyze', progress: 75, message: 'Analyzing content...' });
       const report = await this.analyzeContent(topic, fetchedContent);
       logger.info('Analysis completed');
-      progressCallback({ stage: 'complete', progress: 100, message: 'Research complete' });
+      await this.emitProgress(progressCallback, { stage: 'complete', progress: 100, message: 'Research complete' });
 
       return {
         success: true,
         topic,
         searchResults: searchResults.length,
-        fetchedUrls: fetchedContent.filter(c => c.success).length,
+        fetchedUrls: fetchedContent.filter((c) => c.success).length,
         report,
         timestamp: new Date().toISOString()
       };
     } catch (err) {
       logger.error('Deep research failed', { topic, error: err.message });
-      progressCallback({ stage: 'error', progress: 0, message: err.message });
+      await this.emitProgress(progressCallback, { stage: 'error', progress: 0, message: err.message });
       return {
         success: false,
         topic,
@@ -61,7 +89,8 @@ class DeepResearchService {
   async searchTopic(topic) {
     const client = await this.mcpClient.connect();
     if (!client) {
-      return this.mockSearchResults(topic);
+      logger.warn('Deep research search skipped because MCP client is unavailable');
+      return [];
     }
 
     try {
@@ -70,27 +99,32 @@ class DeepResearchService {
         arguments: { query: topic }
       });
 
-      const data = result?.content?.[0]?.text ? JSON.parse(result.content[0].text) : result;
-      return (data.results || []).map(item => ({
-        title: item.name || item.title,
-        url: item.url,
-        summary: item.summary || item.description,
-        relevanceScore: item.relevanceScore
-      }));
+      const data = this.parseToolPayload(result);
+      return (Array.isArray(data.results) ? data.results : [])
+        .map((item) => ({
+          title: item.name || item.title,
+          url: item.url,
+          summary: item.summary || item.description,
+          relevanceScore: item.relevanceScore
+        }))
+        .filter((item) => Boolean(item.url));
     } catch (err) {
-      logger.warn('Search failed, using mock', { error: err.message });
-      return this.mockSearchResults(topic);
+      logger.warn('Deep research search failed', { error: err.message });
+      return [];
     }
   }
 
   async fetchAllContent(searchResults, maxUrls, maxRetries, progressCallback = () => {}) {
-    const urls = searchResults.slice(0, maxUrls).map(r => r.url);
+    const urls = searchResults
+      .slice(0, maxUrls)
+      .map((item) => String(item?.url || '').trim())
+      .filter(Boolean);
     const results = [];
 
-    for (let i = 0; i < urls.length; i++) {
+    for (let i = 0; i < urls.length; i += 1) {
       const content = await this.fetchWebPage(urls[i], maxRetries);
       results.push(content);
-      progressCallback(i + 1, urls.length);
+      await Promise.resolve(progressCallback(i + 1, urls.length));
     }
 
     return results;
@@ -108,15 +142,16 @@ class DeepResearchService {
         arguments: { url, max_retries: maxRetries }
       });
 
-      const data = result?.content?.[0]?.text ? JSON.parse(result.content[0].text) : result;
+      const data = this.parseToolPayload(result);
+      const content = String(data.content || '');
       return {
         url,
-        success: data.success || false,
+        success: Boolean(data.success),
         title: data.title || '',
         description: data.description || '',
-        content: data.content || '',
-        contentLength: data.contentLength || 0,
-        attempts: data.attempts || 1
+        content,
+        contentLength: Number(data.contentLength || content.length || 0),
+        attempts: Number(data.attempts || 1)
       };
     } catch (err) {
       logger.warn('Fetch failed', { url, error: err.message });
@@ -126,61 +161,98 @@ class DeepResearchService {
 
   async analyzeContent(topic, fetchedContent) {
     // Filter out low-quality fetches (< 100 chars)
-    const successfulFetches = fetchedContent.filter(c => c.success && c.contentLength >= 100);
+    const successfulFetches = (Array.isArray(fetchedContent) ? fetchedContent : [])
+      .filter((item) => item && item.success && Number(item.contentLength || 0) >= 100);
 
     if (successfulFetches.length === 0) {
       return {
         topic,
         summary: 'No quality content successfully fetched for analysis',
         dataQuality: 'insufficient',
+        marketData: {
+          sizes: [],
+          growthRates: [],
+          years: []
+        },
+        competitors: [],
         sources: [],
-        totalContentLength: 0
+        totalContentLength: 0,
+        extractionStats: {
+          marketDataPoints: 0,
+          growthDataPoints: 0,
+          competitorsFound: 0
+        }
       };
     }
 
-    // Enhanced patterns for better data extraction
-    const marketSizePattern = /(\d+(?:[.,]\d+)?)\s*(?:亿|billion|万亿|trillion|百万|million)\s*(?:元|美元|dollar|USD|CNY|人民币)/gi;
-    const growthPattern = /(?:增长|growth|上升|increase|提升|涨幅|CAGR|年均增长).*?(\d+(?:\.\d+)?)\s*%/gi;
-    const competitorPattern = /(?:竞争对手|competitor|公司|company|企业|厂商|品牌|主要企业|leading companies?)[:：\s]+([^\n。，,；;]{2,50})/gi;
-    const yearPattern = /20\d{2}年?/g;
+    const patterns = {
+      marketSize: [
+        /\b(?:USD|US\$|\$|CNY|RMB)?\s?\d+(?:[.,]\d+)?\s?(?:trillion|billion|million)\b/gi,
+        /\b\d+(?:[.,]\d+)?\s?(?:万亿|亿|万元|亿元|亿美元|万亿美元)\b/gi
+      ],
+      growth: [
+        /(?:growth|cagr|increase|decline)[^.\n]{0,40}?\d+(?:\.\d+)?\s*%/gi,
+        /(?:增长|下降|同比|环比|增速|复合增长率)[^。\n]{0,40}?\d+(?:\.\d+)?\s*%/gi
+      ],
+      competitor: [
+        /(?:competitors?|leading companies?|major players?)[:\s]+([^\n.]{2,160})/gi,
+        /(?:竞争对手|主要企业|主要公司|头部企业)[:：]\s*([^\n。]{2,160})/gi
+      ],
+      year: /\b20\d{2}\b/g
+    };
 
-    const marketSizes = [];
-    const growthRates = [];
-    const competitors = new Set();
-    const years = new Set();
+    const extracted = {
+      marketSizes: [],
+      growthRates: [],
+      competitors: new Set(),
+      years: new Set()
+    };
+    const seenMarketSizes = new Set();
+    const seenGrowthRates = new Set();
 
-    successfulFetches.forEach(item => {
+    successfulFetches.forEach((item) => {
       const text = `${item.title} ${item.description} ${item.content}`;
 
       // Extract market sizes
-      patterns.marketSize.forEach(pattern => {
-        let match;
-        while ((match = pattern.exec(text)) !== null) {
-          extracted.marketSizes.push({ value: match[0], source: item.url });
+      patterns.marketSize.forEach((pattern) => {
+        for (const match of text.matchAll(pattern)) {
+          const value = String(match?.[0] || '').trim();
+          if (!value) continue;
+          const key = `${value.toLowerCase()}|${item.url}`;
+          if (seenMarketSizes.has(key)) continue;
+          seenMarketSizes.add(key);
+          extracted.marketSizes.push({ value, source: item.url });
         }
       });
 
       // Extract growth rates
-      patterns.growth.forEach(pattern => {
-        let match;
-        while ((match = pattern.exec(text)) !== null) {
-          extracted.growthRates.push({ value: match[0], source: item.url });
+      patterns.growth.forEach((pattern) => {
+        for (const match of text.matchAll(pattern)) {
+          const value = String(match?.[0] || '').trim();
+          if (!value) continue;
+          const key = `${value.toLowerCase()}|${item.url}`;
+          if (seenGrowthRates.has(key)) continue;
+          seenGrowthRates.add(key);
+          extracted.growthRates.push({ value, source: item.url });
         }
       });
 
       // Extract competitors
-      patterns.competitor.forEach(pattern => {
-        let match;
-        while ((match = pattern.exec(text)) !== null) {
-          const names = match[1].split(/[,，、]/).map(n => n.trim()).filter(n => n.length > 2);
-          names.forEach(name => extracted.competitors.add(name));
+      patterns.competitor.forEach((pattern) => {
+        for (const match of text.matchAll(pattern)) {
+          const rawLine = String(match?.[1] || '');
+          const names = rawLine
+            .split(/[,;|/、，]/)
+            .map((name) => name.trim())
+            .filter((name) => name.length >= 2 && name.length <= 60);
+          names.forEach((name) => extracted.competitors.add(name));
         }
       });
 
       // Extract years
-      let match;
-      while ((match = patterns.year.exec(text)) !== null) {
-        extracted.years.add(match[0]);
+      for (const match of text.matchAll(patterns.year)) {
+        const year = String(match?.[0] || '').trim();
+        if (year) extracted.years.add(year);
       }
     });
 
@@ -194,7 +266,7 @@ class DeepResearchService {
         years: Array.from(extracted.years).sort().reverse()
       },
       competitors: Array.from(extracted.competitors).slice(0, 30),
-      sources: successfulFetches.map(c => ({
+      sources: successfulFetches.map((c) => ({
         url: c.url,
         title: c.title,
         contentLength: c.contentLength
@@ -206,13 +278,6 @@ class DeepResearchService {
         competitorsFound: extracted.competitors.size
       }
     };
-  }
-
-  mockSearchResults(topic) {
-    return [
-      { title: `${topic} - Mock Result 1`, url: 'https://example.com/1', summary: 'Mock summary 1' },
-      { title: `${topic} - Mock Result 2`, url: 'https://example.com/2', summary: 'Mock summary 2' }
-    ];
   }
 }
 

@@ -1,0 +1,71 @@
+{
+  "sec_tickers": [
+    "SBUX",
+    "MCD",
+    "KO",
+    "PEP",
+    "AAPL",
+    "TSLA"
+  ],
+  "web_search": [
+    {
+      "company": "奈雪的茶",
+      "direct_urls": [
+        "https://www1.hkexnews.hk/listedco/listconews/sehk/2023/0421/2023042101655.pdf",
+        "https://www1.hkexnews.hk/listedco/listconews/sehk/2022/0719/2022071900758.pdf",
+        "https://ir.naixue.com/en/investors/financial-reports/"
+      ],
+      "queries": [
+        "Nayuki financial reports",
+        "奈雪的茶 投资者关系 财务报告",
+        "site:hkexnews.hk Nayuki annual report"
+      ]
+    },
+    {
+      "company": "茶百道",
+      "direct_urls": [
+        "https://www1.hkexnews.hk/search/titlesearch.xhtml?lang=en",
+        "https://www1.hkexnews.hk/listedco/listconews/sehk/2024/0415/2024041500023_c.pdf",
+        "https://www1.hkexnews.hk/listedco/listconews/sehk/2024/0415/2024041500022.pdf"
+      ],
+      "queries": [
+        "Chabaidao investor relations report",
+        "茶百道 招股书",
+        "site:hkexnews.hk chabaidao prospectus"
+      ]
+    },
+    {
+      "company": "蜜雪冰城",
+      "direct_urls": [
+        "https://www1.hkexnews.hk/listedco/listconews/sehk/2025/0221/2025022100015_c.htm",
+        "https://www1.hkexnews.hk/listedco/listconews/sehk/2025/0221/2025022100009.pdf",
+        "https://www1.hkexnews.hk/listedco/listconews/sehk/2025/0221/2025022100010_c.pdf"
+      ],
+      "queries": [
+        "Mixue prospectus",
+        "蜜雪冰城 招股书",
+        "蜜雪冰城 投资者关系"
+      ]
+    },
+    {
+      "company": "霸王茶姬",
+      "direct_urls": [
+        "https://investor.chagee.com/"
+      ],
+      "queries": [
+        "Bawang Chaji investor relations",
+        "霸王茶姬 招股书"
+      ]
+    },
+    {
+      "company": "喜茶",
+      "direct_urls": [
+        "https://www.heytea.com/"
+      ],
+      "queries": [
+        "HEYTEA investor relations",
+        "喜茶 财务 报告"
+      ]
+    }
+  ]
+}

@@ -211,49 +211,64 @@
   },
   deepResearch: {
     header: {
-      title: '深度研究',
-      subtitle: '实时搜索、抓取、分析市场数据与竞争对手'
+      title: '深度研究与分析',
+      subtitle: '将深度研究与分析合并为任务流，实时跟踪进度并回看历史结果'
     },
     form: {
-      topicLabel: '研究主题',
-      topicPlaceholder: '例如：新能源汽车市场',
-      startButton: '启动研究'
+      topicLabel: '任务主题',
+      topicPlaceholder: '例如：新能源汽车市场竞争格局与策略建议',
+      startButton: '开始任务'
     },
-    result: {
-      title: '研究结果'
+    common: {
+      refresh: '刷新'
     },
-    section: {
-      marketData: '市场数据',
-      competitors: '竞争对手',
-      sources: '来源列表'
+    running: {
+      title: '当前运行任务',
+      empty: '暂无运行中的任务',
+      topicFallback: '未命名主题'
     },
-    table: {
-      name: '名称',
-      relevance: '相关度',
-      source: '来源'
+    current: {
+      title: '当前任务视图',
+      topic: '主题'
     },
     history: {
-      title: '历史记录',
+      title: '历史任务',
+      empty: '暂无历史任务',
       topic: '主题',
-      time: '时间',
-      status: '状态'
+      status: '状态',
+      progress: '进度',
+      updatedAt: '更新时间',
+      action: '操作',
+      viewResult: '查看结果'
+    },
+    result: {
+      title: '任务结果详情',
+      researchSummary: '研究摘要',
+      sources: '研究来源',
+      analysisNarrative: '分析叙述',
+      keyFindings: '关键发现',
+      suggestions: '行动建议'
     },
     status: {
       searching: '搜索中',
       fetching: '抓取中',
       analyzing: '分析中',
+      pending: '排队中',
+      running: '运行中',
       completed: '已完成',
-      pending: '待启动'
-    },
-    progress: {
-      fetched: '已抓取 {fetched}/{total}'
+      failed: '已失败',
+      unknown: '未知'
     },
     message: {
-      researchFailed: '研究失败',
-      wsError: 'WebSocket 连接异常',
-      topicRequired: '请输入研究主题',
-      started: '研究已启动',
-      startFailed: '启动失败'
+      topicRequired: '请输入任务主题',
+      submitSuccess: '任务已提交并开始执行',
+      submitFailed: '提交任务失败',
+      pollFailed: '获取任务进度失败',
+      loadJobsFailed: '获取任务列表失败',
+      loadResultFailed: '获取任务结果失败',
+      completed: '任务已完成',
+      failed: '任务执行失败',
+      restored: '已恢复离开前的任务并继续跟踪'
     }
   },
   analysisPage: {
