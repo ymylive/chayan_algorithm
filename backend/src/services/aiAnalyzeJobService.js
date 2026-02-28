@@ -117,11 +117,11 @@ class AiAnalyzeJobService {
 
     const result = await pool.query(
       `UPDATE ai_analysis_jobs
-         SET status = $2,
+         SET status = $2::varchar(20),
              progress = $3,
              workflow_step = $4,
              workflow_trace = COALESCE(workflow_trace, '[]'::jsonb) || $5::jsonb,
-             started_at = COALESCE(started_at, CASE WHEN $2 <> 'queued' THEN NOW() ELSE NULL END),
+             started_at = COALESCE(started_at, CASE WHEN $2::text <> 'queued'::text THEN NOW() ELSE NULL END),
              completed_at = ${completedAtExpression},
              updated_at = NOW()
        WHERE id = $1
